@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    method.xml — Defines the Input Method's capabilities and subtypes.
+
+    This file is referenced from AndroidManifest.xml via <meta-data>.
+    Android reads it to know:
+      • What languages/locales this keyboard supports
+      • What input modes it offers (keyboard, voice, handwriting)
+
+    SUBTYPE EXPLAINED:
+    A "subtype" is a variant of your keyboard. For example, Gboard has subtypes
+    for English, Spanish, Arabic, etc. Each subtype can have a different layout.
+
+    Attributes:
+      android:label       → Display name shown in keyboard settings
+      android:imeSubtypeLocale → The BCP 47 locale code ("ug" = Uyghur)
+      android:imeSubtypeMode   → "keyboard" means this is a typing input method
+                                  (as opposed to "voice" or "handwriting")
+-->
+<input-method
+    xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <subtype
+        android:label="@string/subtype_uyghur"
+        android:imeSubtypeLocale="ug"
+        android:imeSubtypeMode="keyboard" />
+
+</input-method>

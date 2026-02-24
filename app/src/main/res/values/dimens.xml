@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dimension constants for the keyboard layout -->
+<resources>
+    <!-- Key sizing -->
+    <dimen name="key_height">48dp</dimen>
+    <dimen name="key_margin">3dp</dimen>
+    <dimen name="key_corner_radius">8dp</dimen>
+
+    <!-- Text sizing -->
+    <dimen name="key_text_size">18sp</dimen>
+    <dimen name="key_text_size_special">14sp</dimen>
+
+    <!-- Keyboard container -->
+    <dimen name="keyboard_padding">4dp</dimen>
+    <dimen name="row_spacing">4dp</dimen>
+</resources>

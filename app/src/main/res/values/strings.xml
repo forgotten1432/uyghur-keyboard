@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Uyghur Keyboard</string>
+    <string name="keyboard_label">Uyghur Keyboard</string>
+    <string name="keyboard_description">Uyghur keyboard with offline speech-to-text</string>
+    <string name="subtype_uyghur">Uyghur (ئۇيغۇرچە)</string>
+
+    <!-- Accessibility content descriptions for special keys -->
+    <string name="key_backspace">Backspace</string>
+    <string name="key_shift">Shift</string>
+    <string name="key_spacebar">Space</string>
+    <string name="key_enter">Enter</string>
+    <string name="key_microphone">Voice input</string>
+    <string name="key_comma">Comma</string>
+    <string name="key_period">Period</string>
+
+    <!-- Keyboard labels -->
+    <string name="space_label">ئۇيغۇر</string>
+</resources>

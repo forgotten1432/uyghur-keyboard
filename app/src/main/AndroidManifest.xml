@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    AndroidManifest.xml — The "ID card" of your Android app.
+    It tells the Android system:
+      • What permissions the app needs
+      • What components (Activities, Services, etc.) the app contains
+      • How those components should be launched
+
+    KEY DESIGN DECISION: This manifest has NO <activity> with a MAIN/LAUNCHER
+    intent filter. That means the app will NOT show an icon in the app drawer.
+    Users interact with it solely through Android's keyboard settings.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+        INTERNET permission — required to download dictionary words and updates from the web.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+        RECORD_AUDIO permission — required to capture microphone input for speech-to-text.
+        On Android 6.0+ (API 23+), this is a "dangerous" permission, meaning the user
+        must grant it at runtime (we'll handle that in a later phase).
+    -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <application
+        android:allowBackup="true"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:largeHeap="true">
+
+        <!--
+            ═══════════════════════════════════════════════════════════════
+            THE IME SERVICE — This is the heart of the keyboard app.
+            ═══════════════════════════════════════════════════════════════
+
+            In Android, an Input Method Editor (IME) is implemented as a Service,
+            not an Activity. A Service runs in the background without its own window
+            — the system gives it a special input area at the bottom of the screen.
+
+            Key attributes explained:
+
+            android:name        → The fully qualified Kotlin class that implements this service.
+            android:label       → The name shown in Settings > Keyboard list.
+            android:permission  → BIND_INPUT_METHOD is REQUIRED. It ensures that ONLY the
+                                   Android system can bind to your IME service (security measure).
+        -->
+        <service
+            android:name=".UyghurKeyboardService"
+            android:label="@string/keyboard_label"
+            android:permission="android.permission.BIND_INPUT_METHOD"
+            android:exported="true">
+
+            <!--
+                This intent filter tells Android: "This service IS an Input Method."
+                Without this, the system won't recognize your app as a keyboard.
+            -->
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+
+            <!--
+                meta-data points to res/xml/method.xml, which defines the keyboard's
+                subtypes (languages, modes). Think of it as the keyboard's "spec sheet"
+                that Android reads to list it in keyboard settings.
+            -->
+            <meta-data
+                android:name="android.view.im"
+                android:resource="@xml/method" />
+        </service>
+
+        <!-- 
+            NOTE: There is intentionally NO <activity> here.
+            No launcher icon = "headless" app. 
+        -->
+
+    </application>
+
+</manifest>
