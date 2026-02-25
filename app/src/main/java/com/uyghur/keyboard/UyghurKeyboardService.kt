@@ -65,9 +65,15 @@ class UyghurKeyboardService : InputMethodService() {
 
     // ─── ASR Components ─────────────────────────────────────────────
     private var asrEngine: AsrEngine? = null
+    private var asrLoading = false
     private val audioRecorder = AudioRecorder()
     private var micButton: Button? = null
     private val asrScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    // ─── Utilities ──────────────────────────────────────────────────
+    // Precompiled regex for fluid, instant typing performance
+    private val wordMatcherRegex = Regex("""[a-zA-ZğüşıöçĞÜŞİÖÇئ-ى]+$""")
+    private val allWordsRegex = Regex("""([a-zA-ZğüşıöçĞÜŞİÖÇئ-ى]+)""")
 
     // ═══════════════════════════════════════════════════════════════
     // LIFECYCLE METHODS
@@ -77,11 +83,17 @@ class UyghurKeyboardService : InputMethodService() {
         super.onCreate()
         Log.d(TAG, "onCreate: Uyghur Keyboard Service created")
         
+        // Load user-learned personalized dictionaries and bigrams
+        DictionaryHelper.init(this)
+
         // Asynchronously fetch extra vocabulary from the internet 
         // without blocking the keyboard. You can replace the URL with your own database endpoint.
         CoroutineScope(Dispatchers.IO).launch {
             DictionaryHelper.fetchUyghurWordsFromUrl("https://raw.githubusercontent.com/forgotten1432/uyghur-keyboard/main/uyghur_words.txt")
         }
+
+        // Asynchronously preload ASR engine so it's ready for immediate use
+        preloadAsrEngine()
     }
 
     /**
@@ -301,8 +313,14 @@ class UyghurKeyboardService : InputMethodService() {
                 addView(secText)
             }
 
+            setOnTouchListener { view, event ->
+                if (event.action == android.view.MotionEvent.ACTION_DOWN) {
+                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                }
+                false // Allow onClick and onLongClick to trigger normally
+            }
+
             setOnClickListener { view ->
-                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                 onCharPressed(char)
             }
 
@@ -339,8 +357,14 @@ class UyghurKeyboardService : InputMethodService() {
                 setMargins(dpToPx(2), dpToPx(1), dpToPx(2), dpToPx(1))
             }
 
+            setOnTouchListener { view, event ->
+                if (event.action == android.view.MotionEvent.ACTION_DOWN) {
+                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                }
+                false
+            }
+
             setOnClickListener { view ->
-                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                 onCharPressed(char)
             }
 
@@ -381,8 +405,14 @@ class UyghurKeyboardService : InputMethodService() {
                 setMargins(dpToPx(2), dpToPx(2), dpToPx(2), dpToPx(2))
             }
 
+            setOnTouchListener { view, event ->
+                if (event.action == android.view.MotionEvent.ACTION_DOWN) {
+                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                }
+                false
+            }
+
             setOnClickListener { view ->
-                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                 action()
             }
         }
@@ -456,18 +486,25 @@ class UyghurKeyboardService : InputMethodService() {
             contentDescription = getString(R.string.key_microphone)
 
             setOnTouchListener { view, event ->
-                when (event.action) {
-                    android.view.MotionEvent.ACTION_DOWN -> {
-                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                        startRecordingIfReady()
-                        true
+                try {
+                    when (event.action) {
+                        android.view.MotionEvent.ACTION_DOWN -> {
+                            Log.d(TAG, "🎤 Mic button ACTION_DOWN")
+                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                            startRecordingIfReady()
+                            true
+                        }
+                        android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                            Log.d(TAG, "🎤 Mic button ACTION_UP")
+                            stopRecordingAndTranscribe()
+                            view.performClick()
+                            true
+                        }
+                        else -> false
                     }
-                    android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
-                        stopRecordingAndTranscribe()
-                        view.performClick()
-                        true
-                    }
-                    else -> false
+                } catch (e: Exception) {
+                    Log.e(TAG, "Mic touch error", e)
+                    false
                 }
             }
 
@@ -494,8 +531,14 @@ class UyghurKeyboardService : InputMethodService() {
 
             contentDescription = getString(R.string.key_spacebar)
 
+            setOnTouchListener { view, event ->
+                if (event.action == android.view.MotionEvent.ACTION_DOWN) {
+                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                }
+                false
+            }
+
             setOnClickListener { view ->
-                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                 onCharPressed(' ')
             }
         }
@@ -521,7 +564,23 @@ class UyghurKeyboardService : InputMethodService() {
      *     (1 = after the inserted text, which is the normal behavior)
      */
     private fun onCharPressed(char: Char) {
-        currentInputConnection?.commitText(char.toString(), 1)
+        val ic = currentInputConnection
+        ic?.commitText(char.toString(), 1)
+        
+        // If a word boundary is typed, learn the word and bigram pattern silently
+        if (char == ' ' || char == '\n' || char == '.' || char == ',' || char == '!') {
+            val textBefore = ic?.getTextBeforeCursor(60, 0)?.toString() ?: ""
+            val matches = allWordsRegex.findAll(textBefore).toList()
+            if (matches.isNotEmpty()) {
+                val lastWord = matches.last().value
+                DictionaryHelper.learnWord(this, lastWord)
+                if (matches.size >= 2) {
+                    val prevword = matches[matches.size - 2].value
+                    DictionaryHelper.learnSequence(this, prevword, lastWord)
+                }
+            }
+        }
+
         updateSuggestions()
     }
 
@@ -542,19 +601,21 @@ class UyghurKeyboardService : InputMethodService() {
      */
     private fun updateSuggestions() {
         val ic = currentInputConnection ?: return
-        val textBefore = ic.getTextBeforeCursor(40, 0)?.toString() ?: ""
+        val textBefore = ic.getTextBeforeCursor(60, 0)?.toString() ?: ""
 
-        // Find the most recent word being typed (characters after the last space/punctuation)
-        // Matches English/Turkish alphabet and Uyghur/Arabic characters
-        val lastWordMatch = Regex("""[a-zA-ZğüşıöçĞÜŞİÖÇئ-ى]+$""").find(textBefore)
+        val lastWordMatch = wordMatcherRegex.find(textBefore)
         val currentWord = lastWordMatch?.value ?: ""
 
-        if (currentWord.isBlank()) {
-            suggestionRow.removeAllViews()
-            return
+        // Find the previous word for Next-Word Prediction
+        val matches = allWordsRegex.findAll(textBefore).toList()
+        var previousWord = ""
+        if (currentWord.isNotBlank() && matches.size >= 2) {
+            previousWord = matches[matches.size - 2].value
+        } else if (currentWord.isBlank() && matches.isNotEmpty() && textBefore.takeLast(1).matches(Regex("""[\s\p{Punct}]"""))) {
+            previousWord = matches.last().value
         }
 
-        val suggestions = DictionaryHelper.getSuggestions(currentWord, currentLanguage)
+        val suggestions = DictionaryHelper.getSuggestions(previousWord, currentWord, currentLanguage)
 
         if (suggestions.isEmpty()) {
             suggestionRow.removeAllViews()
@@ -580,10 +641,18 @@ class UyghurKeyboardService : InputMethodService() {
 
                 setOnClickListener {
                     view -> view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    
+                    // Learn this selection securely
+                    DictionaryHelper.learnWord(this@UyghurKeyboardService, word)
+                    if (previousWord.isNotBlank()) {
+                        DictionaryHelper.learnSequence(this@UyghurKeyboardService, previousWord, word)
+                    }
+
                     // Delete the currently typed partial word
                     ic.deleteSurroundingText(currentWord.length, 0)
                     // Paste the completed word + a space
                     ic.commitText("$word ", 1)
+
                     updateSuggestions()
                 }
             }
@@ -628,58 +697,67 @@ class UyghurKeyboardService : InputMethodService() {
      * First tap: starts recording (mic button shows ⏹).
      * Second tap: stops recording, runs ONNX inference, commits transcribed text.
      */
-    private var asrLoading = false
+    /**
+     * Preloads the ASR engine asynchronously. 
+     */
+    private fun preloadAsrEngine() {
+        if (asrEngine != null || asrLoading) {
+            Log.d(TAG, "preloadAsrEngine: already loaded or loading, skip")
+            return
+        }
+        asrLoading = true
+        Log.d(TAG, "preloadAsrEngine: starting async load...")
+        asrScope.launch {
+            try {
+                val engine = AsrEngine(this@UyghurKeyboardService)
+                withContext(Dispatchers.Main) {
+                    asrEngine = engine
+                    asrLoading = false
+                    Log.d(TAG, "ASR engine preloaded successfully ✅")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load ASR engine: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    asrLoading = false
+                    Toast.makeText(this@UyghurKeyboardService, "ASR يۈكلەنمىدى: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
 
     /**
-     * Starts recording if the ASR engine is ready and permissions are granted.
+     * Starts recording instantly for quick push-to-talk.
      */
     private fun startRecordingIfReady() {
+        Log.d(TAG, "startRecordingIfReady called")
         // Check RECORD_AUDIO permission
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
+        val hasPerm = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        Log.d(TAG, "RECORD_AUDIO permission granted: $hasPerm")
+        if (!hasPerm) {
             Log.w(TAG, "RECORD_AUDIO permission not granted")
-            Toast.makeText(this, "يازما ئاۋاز ئىجازەت بېرىلمىگەن", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "ئاۋاز خاتىرىلەش ھوقۇقى بېرىلمىگەن. تېلېفون تەڭشەكلىرىدىن ئىجازەت بېرىڭ.", Toast.LENGTH_LONG).show()
             return
         }
 
-        // Lazy-load ASR engine on first mic press
+        // If engine is not loaded, try again
+        Log.d(TAG, "ASR engine status: loaded=${asrEngine != null}, loading=$asrLoading")
         if (asrEngine == null) {
-            if (asrLoading) {
-                Toast.makeText(this, "ASR يۈكلىنىۋاتىدۇ...", Toast.LENGTH_SHORT).show()
-                return
-            }
-            asrLoading = true
-            Toast.makeText(this, "ASR يۈكلىنىۋاتىدۇ...", Toast.LENGTH_SHORT).show()
-            asrScope.launch {
-                try {
-                    val engine = AsrEngine(this@UyghurKeyboardService)
-                    withContext(Dispatchers.Main) {
-                        asrEngine = engine
-                        asrLoading = false
-                        Log.d(TAG, "ASR engine loaded successfully")
-                        Toast.makeText(this@UyghurKeyboardService, "ASR تەييار! قايتا بېسىڭ.", Toast.LENGTH_SHORT).show()
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to load ASR engine", e)
-                    withContext(Dispatchers.Main) {
-                        asrLoading = false
-                        Toast.makeText(this@UyghurKeyboardService, "ASR يۈكلەنمىدى", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-            return
+            preloadAsrEngine()
+            Toast.makeText(this, "ASR يۈكلىنىۋاتىدۇ... كۈتۈڭ", Toast.LENGTH_SHORT).show()
         }
 
         if (!audioRecorder.isRecording()) {
             // ─── Start recording ────────────────────────────────────
             Log.d(TAG, "🎤 Starting recording...")
             val started = audioRecorder.startRecording()
+            Log.d(TAG, "🎤 Recording started: $started")
             if (started) {
                 updateMicButton(true)
             } else {
-                Toast.makeText(this, "Mic failed", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Mic ئاچىلالمىدى", Toast.LENGTH_SHORT).show()
             }
+        } else {
+            Log.d(TAG, "Already recording, ignoring startRecording call")
         }
     }
 
@@ -696,7 +774,13 @@ class UyghurKeyboardService : InputMethodService() {
             try {
                 val audio = audioRecorder.stopRecording()
                 Log.d(TAG, "Got ${audio.size} samples")
+                
                 if (audio.isNotEmpty()) {
+                    if (asrEngine == null) {
+                        Toast.makeText(this, "ASR يۈكلىنىۋاتىدۇ... كۈتۈپ تۇرۇڭ", Toast.LENGTH_SHORT).show()
+                        return
+                    }
+
                     val text = asrEngine?.transcribe(audio) ?: ""
                     Log.d(TAG, "ASR result: \"$text\"")
                     if (text.isNotEmpty()) {

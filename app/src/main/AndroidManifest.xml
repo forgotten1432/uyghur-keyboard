@@ -27,6 +27,7 @@
     <application
         android:allowBackup="true"
         android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
         android:supportsRtl="true"
         android:largeHeap="true">
 
@@ -70,10 +71,17 @@
                 android:resource="@xml/method" />
         </service>
 
-        <!-- 
-            NOTE: There is intentionally NO <activity> here.
-            No launcher icon = "headless" app. 
-        -->
+        <!-- Setup Activity: shows in app drawer, handles permission requests -->
+        <activity
+            android:name=".SetupActivity"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.AppCompat.NoActionBar"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
 
     </application>
 
