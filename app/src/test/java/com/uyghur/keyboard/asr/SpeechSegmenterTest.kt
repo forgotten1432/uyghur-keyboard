@@ -35,19 +35,30 @@ class SpeechSegmenterTest {
         return out
     }
 
-    @Test fun pausesSplitPhrases() {
-        val stream = quiet(1.0) + voice(2.0) + quiet(1.0) + voice(1.5) + quiet(1.0)
+    @Test fun longPausesSplitPhrases() {
+        val stream = quiet(1.0) + voice(2.0) + quiet(1.5) + voice(1.5) + quiet(1.5)
         val finals = run(stream).filterIsInstance<SpeechSegmenter.Decision.Final>()
         assertEquals(2, finals.size)
-        // first phrase: speech is 1.0–3.0 s
+        // first phrase: speech is 1.0–3.0 s (+0.4 s end padding)
         assertTrue(finals[0].startSample <= rate * 1.0 && finals[0].startSample >= rate * 0.6)
-        assertTrue(finals[0].endSample >= rate * 3.0 && finals[0].endSample <= rate * 3.4)
-        // second phrase: speech is 4.0–5.5 s
-        assertTrue(finals[1].startSample <= rate * 4.0 && finals[1].endSample >= rate * 5.5)
+        assertTrue(finals[0].endSample >= rate * 3.3 && finals[0].endSample <= rate * 3.5)
+        // second phrase: speech is 4.5–6.0 s
+        assertTrue(finals[1].startSample <= rate * 4.5 && finals[1].endSample >= rate * 6.0)
+    }
+
+    @Test fun shortThinkingPausesDoNotSplit() {
+        val stream = quiet(1.0) + voice(1.5) + quiet(0.7) + voice(1.5) + quiet(1.5)
+        assertEquals(1, run(stream).count { it is SpeechSegmenter.Decision.Final })
+    }
+
+    @Test fun stablePartialHidesWordInProgress() {
+        assertEquals("u sheherdiki", SpeechSegmenter.stablePartial("u sheherdiki ewz"))
+        assertEquals("", SpeechSegmenter.stablePartial("qosh"))
+        assertEquals("", SpeechSegmenter.stablePartial(""))
     }
 
     @Test fun partialsWhileSpeaking() {
-        val partials = run(quiet(0.5) + voice(3.0) + quiet(1.0)).filterIsInstance<SpeechSegmenter.Decision.Partial>()
+        val partials = run(quiet(0.5) + voice(3.0) + quiet(1.5)).filterIsInstance<SpeechSegmenter.Decision.Partial>()
         assertTrue("expected a few partial updates, got ${partials.size}", partials.size in 3..6)
     }
 
@@ -62,7 +73,7 @@ class SpeechSegmenterTest {
     }
 
     @Test fun longSpeechIsCut() {
-        val finals = run(quiet(0.5) + voice(20.0) + quiet(1.0)).filterIsInstance<SpeechSegmenter.Decision.Final>()
+        val finals = run(quiet(0.5) + voice(20.0) + quiet(1.5)).filterIsInstance<SpeechSegmenter.Decision.Final>()
         assertTrue(finals.size >= 2)
         assertTrue(finals.all { it.endSample - it.startSample <= rate * 15.1 })
     }

@@ -12,7 +12,7 @@ Android için Uygurca (Arap harfli) ve İngilizce klavye. **İnternetsiz çalı�
 - **Sesle yazma (Uygurca):**
   - Telefonun üzerinde çalışır; ses hiçbir yere gönderilmez.
   - 🎤'ye bir kez dokun, konuşmaya başla. Bitirmek için ⏹'ye dokun.
-  - Konuşurken metin altı çizili olarak belirir. Kısa bir duraklamada o cümle kesinleşir.
+  - Konuşurken metin altı çizili olarak, bir kelime geriden belirir. ~1 saniyelik duraklamada o cümle kesinleşir; kelime aralarındaki kısa düşünme duraklamaları cümleyi bölmez.
   - Tanınan Latin harfli metin (ULY) otomatik olarak Arap harfli Uygurcaya (UEY) çevrilir.
 
 ## Kurulum

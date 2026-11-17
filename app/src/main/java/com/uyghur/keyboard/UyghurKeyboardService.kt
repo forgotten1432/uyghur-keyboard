@@ -796,7 +796,8 @@ class UyghurKeyboardService : InputMethodService() {
                 when (val d = segmenter.decide(final = stopped)) {
                     is SpeechSegmenter.Decision.Partial -> {
                         val text = engine?.transcribe(audioRecorder.read(d.startSample, d.endSample))?.arabic.orEmpty()
-                        withContext(Dispatchers.Main) { showPartial(text) }
+                        val stable = SpeechSegmenter.stablePartial(text)   // hide the word still being spoken
+                        withContext(Dispatchers.Main) { showPartial(stable) }
                     }
                     is SpeechSegmenter.Decision.Final -> {
                         val text = engine?.transcribe(audioRecorder.read(d.startSample, d.endSample))?.arabic.orEmpty()
