@@ -8,7 +8,8 @@ import android.util.Log
 import com.uyghur.keyboard.asr.Resampler
 
 /**
- * AudioRecorder — Captures mono 16-bit PCM from the microphone.
+ * AudioRecorder — Captures mono 16-bit PCM from the microphone into a buffer that can be read
+ * while recording is still running (for live dictation).
  *
  * IMPORTANT: the ASR model was trained on 22050 Hz audio (gheyret/uyghur-asr-ctc, data.py),
  * and its built-in mel front-end assumes 22050 Hz. Recording at 16 kHz and feeding that
@@ -21,16 +22,20 @@ class AudioRecorder {
         private const val TAG = "AudioRecorder"
         const val MODEL_SAMPLE_RATE = 22050
         private val CANDIDATE_RATES = intArrayOf(22050, 44100, 48000, 16000)
-        private const val MAX_DURATION_SECONDS = 30
+        const val MAX_DURATION_SECONDS = 300
     }
 
     private var audioRecord: AudioRecord? = null
     private var recordingThread: Thread? = null
     @Volatile private var isRecording = false
 
-    private var recordRate = MODEL_SAMPLE_RATE
-    private var pcmBuffer = ShortArray(0)
-    @Volatile private var sampleCount = 0
+    /** Sample rate actually used by the microphone (may differ from MODEL_SAMPLE_RATE). */
+    @Volatile var recordRate = MODEL_SAMPLE_RATE
+        private set
+    @Volatile private var pcmBuffer = ShortArray(0)
+    /** Number of samples recorded so far (at [recordRate]). Safe to read from any thread. */
+    @Volatile var sampleCount = 0
+        private set
 
     @SuppressLint("MissingPermission")
     fun startRecording(): Boolean {
@@ -76,13 +81,14 @@ class AudioRecorder {
         record.startRecording()
 
         recordingThread = Thread({
-            val chunk = ShortArray(recordRate / 10) // 100 ms
-            while (isRecording && sampleCount < pcmBuffer.size) {
-                val toRead = minOf(chunk.size, pcmBuffer.size - sampleCount)
+            val chunk = ShortArray(recordRate / 20) // 50 ms
+            val buf = pcmBuffer
+            while (isRecording && sampleCount < buf.size) {
+                val toRead = minOf(chunk.size, buf.size - sampleCount)
                 val read = audioRecord?.read(chunk, 0, toRead) ?: 0
                 if (read > 0) {
-                    System.arraycopy(chunk, 0, pcmBuffer, sampleCount, read)
-                    sampleCount += read
+                    System.arraycopy(chunk, 0, buf, sampleCount, read)
+                    sampleCount += read   // publish after the copy (volatile write)
                 }
             }
             Log.d(TAG, "Recording thread finished. Samples: $sampleCount")
@@ -93,11 +99,13 @@ class AudioRecorder {
         return true
     }
 
-    /**
-     * Stops recording and returns float audio in [-1, 1] at [MODEL_SAMPLE_RATE] Hz,
-     * with leading/trailing silence trimmed.
-     */
-    fun stopRecording(): FloatArray {
+    /** True while the microphone is on, or the buffer is full (max duration reached). */
+    fun isRecording(): Boolean = isRecording
+
+    fun isFull(): Boolean = isRecording && sampleCount >= pcmBuffer.size
+
+    /** Stops the microphone. The recorded samples stay readable via [read]. */
+    fun stop() {
         isRecording = false
         try {
             recordingThread?.join(1000)
@@ -112,36 +120,18 @@ class AudioRecorder {
         audioRecord?.release()
         audioRecord = null
         recordingThread = null
-
-        val n = sampleCount
-        if (n == 0) return FloatArray(0)
-
-        var audio = FloatArray(n) { pcmBuffer[it] / 32768.0f }
-        audio = Resampler.resample(audio, recordRate, MODEL_SAMPLE_RATE)
-        audio = trimSilence(audio, MODEL_SAMPLE_RATE)
-        Log.d(TAG, "Recorded ${n / recordRate.toFloat()}s @${recordRate}Hz → ${audio.size} samples @${MODEL_SAMPLE_RATE}Hz")
-        return audio
+        Log.d(TAG, "Recording stopped: ${sampleCount / recordRate.toFloat()} s")
     }
 
-    fun isRecording(): Boolean = isRecording
-
-    /** Removes silence at both ends (keeps 0.25 s padding). Leaves audio untouched if it is all quiet. */
-    private fun trimSilence(x: FloatArray, rate: Int): FloatArray {
-        val frame = rate / 50 // 20 ms
-        if (x.size < frame * 5) return x
-        val energies = FloatArray(x.size / frame) { f ->
-            var e = 0f
-            for (i in f * frame until (f + 1) * frame) e += x[i] * x[i]
-            e / frame
-        }
-        val peak = energies.maxOrNull() ?: return x
-        val threshold = peak * 0.002f // ~ -27 dB below the loudest frame
-        val first = energies.indexOfFirst { it > threshold }
-        val last = energies.indexOfLast { it > threshold }
-        if (first < 0) return x
-        val pad = rate / 4
-        val start = maxOf(0, first * frame - pad)
-        val end = minOf(x.size, (last + 1) * frame + pad)
-        return x.copyOfRange(start, end)
+    /** Raw samples [from, to) at [recordRate], as floats in [-1, 1]. */
+    fun readRaw(from: Int, to: Int): FloatArray {
+        val buf = pcmBuffer
+        val end = minOf(to, sampleCount)
+        if (from >= end) return FloatArray(0)
+        return FloatArray(end - from) { buf[from + it] / 32768.0f }
     }
+
+    /** Samples [from, to) (indices at [recordRate]) resampled to [MODEL_SAMPLE_RATE] for the model. */
+    fun read(from: Int, to: Int): FloatArray =
+        Resampler.resample(readRaw(from, to), recordRate, MODEL_SAMPLE_RATE)
 }
