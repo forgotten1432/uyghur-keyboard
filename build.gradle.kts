@@ -9,4 +9,6 @@ plugins {
 
     // Kotlin Android plugin — compiles .kt files and integrates with the Android build pipeline.
     id("org.jetbrains.kotlin.android") version "1.9.22" apply false
+    // Screenshot tests of the keyboard view (renders views on the JVM, no phone needed)
+    id("app.cash.paparazzi") version "1.3.4" apply false
 }
