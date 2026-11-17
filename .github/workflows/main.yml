@@ -31,6 +31,9 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest
+
       - name: Build Debug APK
         run: ./gradlew assembleDebug
 
@@ -46,9 +49,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="build-${{ github.run_number }}"
+          VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          TAG="v$VERSION-build-${{ github.run_number }}"
           cp app/build/outputs/apk/debug/app-debug.apk UyghurKeyboard.apk
           PRE=""; [ "${{ github.ref_name }}" != "main" ] && PRE="--prerelease"
           gh release create "$TAG" UyghurKeyboard.apk --target "${{ github.sha }}" $PRE \
-            --title "Uygurca Klavye — derleme ${{ github.run_number }} (${{ github.ref_name }})" \
+            --title "Uygurca Klavye $VERSION — derleme ${{ github.run_number }} (${{ github.ref_name }})" \
             --notes "Branch: ${{ github.ref_name }}, commit ${{ github.sha }}. Telefonda UyghurKeyboard.apk dosyasını indirip kur."
