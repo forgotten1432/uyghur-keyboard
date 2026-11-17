@@ -41,7 +41,7 @@ Mac mini (M1) eğitim için çok yavaş kalır; orada sadece değerlendirme ve d
 ## En çok fayda sağlayan 3 şey
 
 1. **Kendi sesin:** 100–300 cümleyi telefonla kendin oku (notebook'taki 3c adımı). Model senin sesine ve mikrofonuna alışır. Az veriyle en büyük kazanç budur.
-2. **Daha çok metin (dil modeli):** `export_char_lm.py` her satırı bir cümle olan herhangi bir Latin Uygurca metni kabul eder. Arapça metinler için önce `uey_to_uly()` ile çevir. Haber ve kitap metinleri eklemek, ses verisi olmadan da hata oranını düşürür.
+2. **Daha çok metin (dil modeli):** `export_char_lm.py` her satırı bir cümle olan herhangi bir Latin Uygurca metni kabul eder. Arapça metinler için önce `uey_to_uly()` ile çevir. Haber ve kitap metinleri eklemek, ses verisi olmadan da hata oranını düşürür. Mevcut metin havuzu `corpus/` klasöründe (THUYG-20 + `uyghur-language/data` sözlükleri); yeniden kurma komutu `corpus/README.md` içinde.
 3. **Gürültü:** Eğitimde rastgele gürültü ve hız değişimi zaten açık. Gürültülü ortamda kullanıyorsan gerçek arka plan kayıtlarını (`augment_wave`) eklemek fayda sağlar.
 
 ## Teknik notlar
