@@ -19,8 +19,14 @@ field_text() { dump; python3 $K text "$OUT/ui.xml" "$1"; }
 
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb shell pm grant $PKG android.permission.RECORD_AUDIO
+# the system needs a moment to register a newly installed keyboard
+for i in $(seq 1 30); do
+  adb shell ime list -a -s | grep -q "$PKG" && break
+  sleep 2
+done
 adb shell ime enable $IME
 adb shell ime set $IME
+log "current keyboard: $(adb shell settings get secure default_input_method)"
 adb shell settings put system show_touches 1
 adb logcat -c
 adb shell am start -n $PKG/.SetupActivity
