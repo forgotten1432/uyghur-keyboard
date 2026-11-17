@@ -7,8 +7,16 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # The app model (assets/*.onnx) is a normal git file. model/uyghur_asr_fp32.onnx is in Git LFS
+      # and only needed for training, so LFS is not pulled here.
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Verify model is real (not an LFS pointer)
+        run: |
+          size=$(stat -c %s app/src/main/assets/uyghur_asr_int8.onnx)
+          echo "model size: $size bytes"
+          test "$size" -gt 1000000
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4

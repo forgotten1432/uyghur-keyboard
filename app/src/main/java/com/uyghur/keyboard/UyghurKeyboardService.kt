@@ -65,10 +65,11 @@ class UyghurKeyboardService : InputMethodService() {
 
     // ─── ASR Components ─────────────────────────────────────────────
     private var asrEngine: AsrEngine? = null
-    private var asrLoading = false
+    private var asrLoad: Deferred<AsrEngine?>? = null
     private val audioRecorder = AudioRecorder()
     private var micButton: Button? = null
-    private val asrScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val asrScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private var transcribing = false
 
     // ─── Utilities ──────────────────────────────────────────────────
     // Precompiled regex for fluid, instant typing performance
@@ -472,7 +473,11 @@ class UyghurKeyboardService : InputMethodService() {
      */
     private fun createMicKey(weight: Float): Button {
         return Button(this).apply {
-            text = if (audioRecorder.isRecording()) "⏹" else "🎤"
+            text = when {
+                transcribing -> "⏳"
+                audioRecorder.isRecording() -> "⏹"
+                else -> "🎤"
+            }
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
             setBackgroundResource(R.drawable.key_background_special)
             isAllCaps = false
@@ -700,29 +705,25 @@ class UyghurKeyboardService : InputMethodService() {
     /**
      * Preloads the ASR engine asynchronously. 
      */
-    private fun preloadAsrEngine() {
-        if (asrEngine != null || asrLoading) {
-            Log.d(TAG, "preloadAsrEngine: already loaded or loading, skip")
-            return
-        }
-        asrLoading = true
+    private fun preloadAsrEngine(): Deferred<AsrEngine?> {
+        asrLoad?.let { if (!it.isCompleted || asrEngine != null) return it }
         Log.d(TAG, "preloadAsrEngine: starting async load...")
-        asrScope.launch {
+        val job = asrScope.async(Dispatchers.IO) {
             try {
-                val engine = AsrEngine(this@UyghurKeyboardService)
-                withContext(Dispatchers.Main) {
-                    asrEngine = engine
-                    asrLoading = false
+                AsrEngine(this@UyghurKeyboardService).also {
+                    asrEngine = it
                     Log.d(TAG, "ASR engine preloaded successfully ✅")
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 Log.e(TAG, "Failed to load ASR engine: ${e.message}", e)
                 withContext(Dispatchers.Main) {
-                    asrLoading = false
                     Toast.makeText(this@UyghurKeyboardService, "ASR يۈكلەنمىدى: ${e.message}", Toast.LENGTH_LONG).show()
                 }
+                null
             }
         }
+        asrLoad = job
+        return job
     }
 
     /**
@@ -739,12 +740,10 @@ class UyghurKeyboardService : InputMethodService() {
             return
         }
 
-        // If engine is not loaded, try again
-        Log.d(TAG, "ASR engine status: loaded=${asrEngine != null}, loading=$asrLoading")
-        if (asrEngine == null) {
-            preloadAsrEngine()
-            Toast.makeText(this, "ASR يۈكلىنىۋاتىدۇ... كۈتۈڭ", Toast.LENGTH_SHORT).show()
-        }
+        if (transcribing) return
+
+        // Make sure the engine is (being) loaded; recording can start meanwhile.
+        if (asrEngine == null) preloadAsrEngine()
 
         if (!audioRecorder.isRecording()) {
             // ─── Start recording ────────────────────────────────────
@@ -765,36 +764,38 @@ class UyghurKeyboardService : InputMethodService() {
      * Stops the active recording, runs ASR inference, and commits text.
      */
     private fun stopRecordingAndTranscribe() {
-        if (audioRecorder.isRecording()) {
-            // ─── Stop recording and transcribe ─────────────────────
-            Log.d(TAG, "🎤 Stopping recording...")
-            updateMicButton(false)
+        if (!audioRecorder.isRecording() || transcribing) return
+        Log.d(TAG, "🎤 Stopping recording...")
+        transcribing = true
+        micButton?.text = "⏳"
 
-            // Run everything on main thread — inference is fast (~300ms)
-            try {
+        // Inference on a 80 MB model takes 0.5–2 s on a phone: never run it on the main thread.
+        asrScope.launch {
+            val text = try {
                 val audio = audioRecorder.stopRecording()
-                Log.d(TAG, "Got ${audio.size} samples")
-                
-                if (audio.isNotEmpty()) {
-                    if (asrEngine == null) {
-                        Toast.makeText(this, "ASR يۈكلىنىۋاتىدۇ... كۈتۈپ تۇرۇڭ", Toast.LENGTH_SHORT).show()
-                        return
-                    }
-
-                    val text = asrEngine?.transcribe(audio) ?: ""
-                    Log.d(TAG, "ASR result: \"$text\"")
-                    if (text.isNotEmpty()) {
-                        currentInputConnection?.commitText(text, 1)
-                        Log.d(TAG, "commitText done")
-                    } else {
-                        Toast.makeText(this, "No text recognized", Toast.LENGTH_SHORT).show()
-                    }
+                if (audio.isEmpty()) {
+                    ""
                 } else {
-                    Toast.makeText(this, "No audio", Toast.LENGTH_SHORT).show()
+                    val engine = asrEngine ?: preloadAsrEngine().await()
+                    engine?.transcribe(audio)?.arabic ?: ""
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 Log.e(TAG, "ASR error", e)
-                Toast.makeText(this, "ASR error", Toast.LENGTH_SHORT).show()
+                null
+            }
+            withContext(Dispatchers.Main) {
+                transcribing = false
+                updateMicButton(false)
+                when {
+                    text == null -> Toast.makeText(this@UyghurKeyboardService, "ASR خاتالىقى", Toast.LENGTH_SHORT).show()
+                    text.isEmpty() -> Toast.makeText(this@UyghurKeyboardService, "ئاۋاز تونۇلمىدى", Toast.LENGTH_SHORT).show()
+                    else -> {
+                        val ic = currentInputConnection
+                        val before = ic?.getTextBeforeCursor(1, 0)?.toString().orEmpty()
+                        val prefix = if (before.isNotEmpty() && !before.last().isWhitespace()) " " else ""
+                        ic?.commitText("$prefix$text ", 1)
+                    }
+                }
             }
         }
     }
@@ -803,7 +804,11 @@ class UyghurKeyboardService : InputMethodService() {
      * Updates the mic button's visual state to reflect recording status.
      */
     private fun updateMicButton(recording: Boolean) {
-        micButton?.text = if (recording) "⏹" else "🎤"
+        micButton?.text = when {
+            transcribing -> "⏳"
+            recording -> "⏹"
+            else -> "🎤"
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════

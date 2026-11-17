@@ -5,242 +5,107 @@ import android.util.Log
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
+import com.uyghur.keyboard.asr.CharLanguageModel
+import com.uyghur.keyboard.asr.CtcDecoder
+import com.uyghur.keyboard.asr.UyghurScript
+import java.io.File
 import java.nio.FloatBuffer
 
 /**
- * AsrEngine — Loads the ONNX speech recognition model and runs inference.
+ * AsrEngine — runs the Uyghur CTC model (gheyret/uyghur-asr-ctc, trained on THUYG-20).
  *
- * The model is a CTC-based network trained on Uyghur Latin (ULY) script:
- *   Input:  raw 16 kHz float32 waveform, shape [length]
- *   Output: LogSoftmax probabilities, shape [1, 34, time_steps]
+ *   Input  "input":  raw float32 waveform at 22050 Hz, shape [length]. The model normalises
+ *                    loudness and computes the mel spectrogram itself — do NOT pre-normalise.
+ *   Output "output": log-softmax, shape [1, 34, time]
  *
- * 34 output classes = blank + 32 Latin Uyghur chars + space
+ * Decoding: CTC prefix beam search + character n-gram LM, then ULY Latin → Arabic script.
  */
 class AsrEngine(context: Context) {
 
     companion object {
         private const val TAG = "AsrEngine"
-        private const val MODEL_FILE = "uyghur_asr.onnx"
-
-        /**
-         * Uyghur Latin (ULY) vocabulary — 34 classes.
-         * Reverse-engineered from Wav2Vec2/Fairseq CTC token mappings:
-         * 0, 1, 2: blank / special tokens
-         * 3..28: English alphabet a..z
-         * 29..32: special characters (word separator at 29, then ö, é, ü)
-         * 33: space
-         */
-        private val VOCAB: Array<String> = arrayOf(
-            "",    // 0: blank
-            "",    // 1: pad
-            "",    // 2: unk
-            "a",   // 3
-            "b",   // 4
-            "c",   // 5
-            "d",   // 6
-            "e",   // 7
-            "f",   // 8
-            "g",   // 9
-            "h",   // 10
-            "i",   // 11
-            "j",   // 12
-            "k",   // 13
-            "l",   // 14
-            "m",   // 15
-            "n",   // 16
-            "o",   // 17
-            "p",   // 18
-            "q",   // 19
-            "r",   // 20
-            "s",   // 21
-            "t",   // 22
-            "u",   // 23
-            "v",   // 24
-            "w",   // 25
-            "x",   // 26
-            "y",   // 27
-            "z",   // 28
-            " ",   // 29: Word separator! (model outputs this between words)
-            "é",   // 30
-            "ö",   // 31
-            "ü",   // 32
-            " "    // 33: alternative space
-        )
-
-        /**
-         * Mapping from Latin Uyghur (ULY) to Arabic Uyghur script.
-         */
-        private val LATIN_TO_ARABIC = mapOf(
-            "a" to "ا", "e" to "ە", "é" to "ې", "i" to "ى",
-            "o" to "و", "ö" to "ۆ", "u" to "ۇ", "ü" to "ۈ",
-            "b" to "ب", "p" to "پ", "t" to "ت", "j" to "ج",
-            "ch" to "چ", "x" to "خ", "d" to "د", "r" to "ر",
-            "z" to "ز", "zh" to "ژ", "s" to "س", "sh" to "ش",
-            "gh" to "غ", "g" to "گ", "f" to "ف", "q" to "ق",
-            "k" to "ك", "ng" to "ڭ", "l" to "ل", "m" to "م",
-            "n" to "ن", "h" to "ھ", "w" to "ۋ", "y" to "ي",
-            " " to " ", "'" to ""
-        )
+        private const val MODEL_FILE = "uyghur_asr_int8.onnx"
+        private const val LM_FILE = "uyghur_char_lm.txt"
     }
 
     private val ortEnv: OrtEnvironment = OrtEnvironment.getEnvironment()
     private val session: OrtSession
+    private val lm: CharLanguageModel?
 
     init {
-        Log.d(TAG, "Loading ONNX model...")
-        val modelFile = java.io.File(context.filesDir, MODEL_FILE)
-        if (!modelFile.exists()) {
-            Log.d(TAG, "Copying model to internal storage...")
-            context.assets.open(MODEL_FILE).use { input ->
-                modelFile.outputStream().use { output ->
-                    input.copyTo(output, bufferSize = 8192)
-                }
-            }
-            Log.d(TAG, "Model copied: ${modelFile.length()} bytes")
-        }
+        val modelFile = copyAssetIfChanged(context, MODEL_FILE)
         val opts = OrtSession.SessionOptions().apply {
-            setIntraOpNumThreads(2)
+            setIntraOpNumThreads(Runtime.getRuntime().availableProcessors().coerceIn(1, 4))
+            setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
         }
         session = ortEnv.createSession(modelFile.absolutePath, opts)
-        Log.d(TAG, "ONNX model loaded. Inputs: ${session.inputNames}, Outputs: ${session.outputNames}")
-    }
+        Log.d(TAG, "Model loaded (${modelFile.length() / 1_000_000} MB). Inputs: ${session.inputNames}")
 
-    /**
-     * Transcribes raw audio to Uyghur Arabic script text.
-     */
-    fun transcribe(audio: FloatArray): String {
-        if (audio.isEmpty()) return ""
-
-        Log.d(TAG, "Running inference on ${audio.size} samples (${audio.size / 16000f}s)")
-
-        // Wav2Vec2 models typically require zero-mean, unit-variance normalization
-        val mean = audio.average().toFloat()
-        var variance = 0f
-        for (f in audio) {
-            val dev = f - mean
-            variance += dev * dev
-        }
-        variance /= audio.size
-        val stdDev = kotlin.math.sqrt(variance.toDouble() + 1e-7).toFloat()
-
-        val normalizedAudio = FloatArray(audio.size)
-        for (i in audio.indices) {
-            normalizedAudio[i] = (audio[i] - mean) / stdDev
-        }
-
-        try {
-            val inputTensor = OnnxTensor.createTensor(
-                ortEnv,
-                FloatBuffer.wrap(normalizedAudio),
-                longArrayOf(normalizedAudio.size.toLong())
-            )
-
-            val latinText = inputTensor.use { tensor ->
-                session.run(mapOf("input" to tensor)).use { results ->
-                    val outputTensor = results[0] as OnnxTensor
-                    val shape = outputTensor.info.shape
-                    Log.d(TAG, "Output shape: [${shape.joinToString(", ")}]")
-
-                    val buf = outputTensor.floatBuffer
-                    val totalSize = buf.remaining()
-                    val rawData = FloatArray(totalSize)
-                    buf.get(rawData)
-
-                    val numClasses = shape[1].toInt()
-                    val timeSteps = shape[2].toInt()
-
-                    val logProbs = Array(timeSteps) { t ->
-                        FloatArray(numClasses) { c ->
-                            rawData[c * timeSteps + t]
-                        }
-                    }
-
-                    val decoded = ctcGreedyDecode(logProbs)
-                    Log.d(TAG, "Transcribed Latin: \"$decoded\"")
-
-                    // Convert to Arabic script (UEY)
-                    val arabicText = latinToArabic(decoded)
-                    Log.d(TAG, "Transcribed Arabic: \"$arabicText\"")
-                    arabicText
-                }
-            }
-
-            return latinText
+        lm = try {
+            context.assets.open(LM_FILE).use { CharLanguageModel.load(it) }
         } catch (e: Exception) {
-            Log.e(TAG, "Transcription failed", e)
-            return ""
+            Log.w(TAG, "Char LM not loaded, falling back to plain beam search", e)
+            null
         }
-    }
-
-    private fun ctcGreedyDecode(logProbs: Array<FloatArray>): String {
-        val result = StringBuilder()
-        var prevIndex = -1
-        val nonBlankIndices = mutableListOf<Int>()
-
-        for (t in logProbs.indices) {
-            var bestIdx = 0
-            var bestVal = logProbs[t][0]
-            for (c in 1 until logProbs[t].size) {
-                if (logProbs[t][c] > bestVal) {
-                    bestVal = logProbs[t][c]
-                    bestIdx = c
-                }
-            }
-
-            if (bestIdx != 0 && bestIdx != prevIndex) {
-                nonBlankIndices.add(bestIdx)
-                if (bestIdx < VOCAB.size) {
-                    result.append(VOCAB[bestIdx])
-                }
-            }
-            prevIndex = bestIdx
-        }
-
-        Log.d(TAG, "All non-blank indices: $nonBlankIndices")
-        return result.toString()
     }
 
     /**
-     * Converts Latin Uyghur text to Arabic Uyghur script.
-     * Handles digraphs first, then characters. Adds Hemze (ئ) before word-initial vowels.
+     * Copies a model asset to internal storage. Re-copies when the size changed (new APK with a
+     * new model, or a previously broken/partial copy) and writes atomically via a temp file.
      */
-    private fun latinToArabic(latin: String): String {
-        var text = latin.lowercase()
-        // Replace digraphs first
-        val digraphs = listOf("ch", "gh", "sh", "zh", "ng")
-        for (dg in digraphs) {
-            val arabic = LATIN_TO_ARABIC[dg] ?: dg
-            text = text.replace(dg, arabic)
+    private fun copyAssetIfChanged(context: Context, name: String): File {
+        val target = File(context.filesDir, name)
+        val assetSize = try {
+            context.assets.openFd(name).use { it.length }   // works because .onnx is stored uncompressed
+        } catch (e: Exception) {
+            -1L
         }
+        if (target.exists() && (assetSize < 0 || target.length() == assetSize)) return target
 
-        // Add Hemze (ئ) before vowels at the start of a word
-        // Vowels in Latin: a, e, é, i, o, ö, u, ü
-        val vowels = listOf('a', 'e', 'é', 'i', 'o', 'ö', 'u', 'ü')
-        val sb = StringBuilder()
-        var isWordStart = true
-
-        for (ch in text) {
-            if (ch == ' ' || ch == '\'') {
-                isWordStart = true
-                if (ch == ' ') sb.append(' ')
-                // Ignore apostrophe as it's often generated at the end
-                continue
-            }
-
-            if (isWordStart && vowels.contains(ch)) {
-                sb.append("ئ")
-            }
-            isWordStart = false
-
-            val mapped = LATIN_TO_ARABIC[ch.toString()]
-            sb.append(mapped ?: ch)
+        Log.d(TAG, "Copying $name to internal storage (asset size $assetSize)")
+        val tmp = File(context.filesDir, "$name.tmp")
+        context.assets.open(name).use { input -> tmp.outputStream().use { input.copyTo(it, 1 shl 16) } }
+        if (tmp.length() < 1_000_000) {
+            tmp.delete()
+            error("$name is only ${tmp.length()} bytes — the APK contains a Git LFS pointer, not the model. Build with LFS enabled.")
         }
-        return sb.toString()
+        if (!tmp.renameTo(target)) {
+            target.delete(); tmp.renameTo(target)
+        }
+        // remove the old fp32 model from previous versions to free ~280 MB
+        File(context.filesDir, "uyghur_asr.onnx").delete()
+        return target
+    }
+
+    data class Result(val latin: String, val arabic: String)
+
+    /** Transcribes 22050 Hz audio. Call from a background thread. */
+    fun transcribe(audio: FloatArray): Result {
+        if (audio.size < AudioRecorder.MODEL_SAMPLE_RATE / 5) return Result("", "")
+        val t0 = System.currentTimeMillis()
+
+        val logProbs: Array<FloatArray> =
+            OnnxTensor.createTensor(ortEnv, FloatBuffer.wrap(audio), longArrayOf(audio.size.toLong())).use { tensor ->
+                session.run(mapOf(session.inputNames.first() to tensor)).use { results ->
+                    val out = results[0] as OnnxTensor
+                    val shape = out.info.shape            // [1, classes, time]
+                    val classes = shape[1].toInt()
+                    val time = shape[2].toInt()
+                    val raw = FloatArray(classes * time)
+                    out.floatBuffer.get(raw)
+                    Array(time) { t -> FloatArray(classes) { c -> raw[c * time + t] } }
+                }
+            }
+        val t1 = System.currentTimeMillis()
+
+        val latin = CtcDecoder.beamSearch(logProbs, lm)
+        val arabic = UyghurScript.latinToArabic(latin)
+        Log.d(TAG, "inference ${t1 - t0} ms, decode ${System.currentTimeMillis() - t1} ms: \"$latin\" → \"$arabic\"")
+        return Result(latin, arabic)
     }
 
     fun close() {
-        session.close()
-        ortEnv.close()
+        session.close()  // OrtEnvironment is a process-wide singleton; don't close it
         Log.d(TAG, "ONNX session closed")
     }
 }

@@ -56,6 +56,12 @@ android {
         }
     }
 
+    // Store the model and LM uncompressed in the APK: faster copy on first start and
+    // lets AsrEngine read the exact asset size (openFd) to detect a stale/broken copy.
+    androidResources {
+        noCompress += listOf("onnx", "txt")
+    }
+
     // AGP 8.x requires Java 17 for compilation.
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
