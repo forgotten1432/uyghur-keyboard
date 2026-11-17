@@ -7,6 +7,9 @@ plugins {
 
     // Apply the Kotlin Android plugin — enables writing Kotlin code in this module.
     id("org.jetbrains.kotlin.android")
+
+    // Screenshot tests: ./gradlew recordPaparazziDebug writes PNGs to app/src/test/snapshots/images
+    id("app.cash.paparazzi")
 }
 
 android {
