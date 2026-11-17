@@ -32,6 +32,26 @@ class CtcDecoderTest {
         assertEquals(CtcDecoder.greedy(lp), CtcDecoder.beamSearch(lp, lm = null))
     }
 
+    @Test fun lexiconBonusPrefersRealWord() {
+        // last vowel is a coin flip between "bilen" (a word) and "bilan" (not a word)
+        val v = CtcDecoder.VOCAB
+        val seq = "b_i_l_?_n"
+        val lp = Array(seq.length) { t ->
+            FloatArray(v.size) { c ->
+                when {
+                    seq[t] == '?' && c == v.indexOf('a') -> ln(0.50f)
+                    seq[t] == '?' && c == v.indexOf('e') -> ln(0.45f)
+                    seq[t] == '_' && c == CtcDecoder.BLANK -> ln(0.97f)
+                    seq[t] != '_' && seq[t] != '?' && c == v.indexOf(seq[t]) -> ln(0.97f)
+                    else -> ln(0.001f)
+                }
+            }
+        }
+        assertEquals("bilan", CtcDecoder.beamSearch(lp, lm = null))
+        val lex = CtcDecoder.Lexicon(arrayOf("bilen", "bir"))
+        assertEquals("bilen", CtcDecoder.beamSearch(lp, lm = null, lexicon = lex))
+    }
+
     @Test fun emptyInput() {
         assertEquals("", CtcDecoder.greedy(frames("_____")))
         assertEquals("", CtcDecoder.beamSearch(frames("_____"), lm = null))

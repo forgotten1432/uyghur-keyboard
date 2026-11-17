@@ -26,11 +26,13 @@ class AsrEngine(context: Context) {
         private const val TAG = "AsrEngine"
         private const val MODEL_FILE = "uyghur_asr_int8.onnx"
         private const val LM_FILE = "uyghur_char_lm.txt"
+        private const val LEXICON_FILE = "uyghur_lexicon_latin.txt"
     }
 
     private val ortEnv: OrtEnvironment = OrtEnvironment.getEnvironment()
     private val session: OrtSession
     private val lm: CharLanguageModel?
+    private val lexicon: CtcDecoder.Lexicon?
 
     init {
         val modelFile = copyAssetIfChanged(context, MODEL_FILE)
@@ -45,6 +47,12 @@ class AsrEngine(context: Context) {
             context.assets.open(LM_FILE).use { CharLanguageModel.load(it) }
         } catch (e: Exception) {
             Log.w(TAG, "Char LM not loaded, falling back to plain beam search", e)
+            null
+        }
+        lexicon = try {
+            context.assets.open(LEXICON_FILE).use { CtcDecoder.Lexicon.load(it) }
+        } catch (e: Exception) {
+            Log.w(TAG, "Lexicon not loaded", e)
             null
         }
     }
@@ -98,7 +106,7 @@ class AsrEngine(context: Context) {
             }
         val t1 = System.currentTimeMillis()
 
-        val latin = CtcDecoder.beamSearch(logProbs, lm)
+        val latin = CtcDecoder.beamSearch(logProbs, lm, lexicon = lexicon)
         val arabic = UyghurScript.latinToArabic(latin)
         Log.d(TAG, "inference ${t1 - t0} ms, decode ${System.currentTimeMillis() - t1} ms: \"$latin\" → \"$arabic\"")
         return Result(latin, arabic)

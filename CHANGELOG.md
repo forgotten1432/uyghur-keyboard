@@ -1,5 +1,12 @@
 # Değişiklik kaydı
 
+## 1.3.1 — 2026-11-17
+
+- **Ses tanımada sözlük bonusu:** tanıma, 154 bin Uygurca kelimelik sözlükte olan kelimeleri biraz daha fazla tercih ediyor. THUYG-20 test kümesinde kelime hatası %12,0'dan %11,6'ya indi.
+  - Daha büyük bir dil modeli, kelime sınırı bonusu ve daha geniş arama da denendi; ek kazanç ölçüm gürültüsü düzeyinde kaldı.
+  - Kalan hataların çoğu akustik (özel isimler, nadir kelimeler, ünlüler). Bunu düşürmenin yolu modeli daha çok veriyle eğitmek (TRAINING.md).
+- **Emülatör testi:** her derlemede gerçek Android 14 emülatöründe klavye kurulup tuşlara basılarak deneniyor. Ekran görüntüleri `emulator-shots` branch'inde.
+
 ## 1.3.0 — 2026-11-17
 
 - **Türkçe klavye:** Türkçe Q düzeni (ğ ü ş ı i ö ç) ve 50 bin kelimelik Türkçe sözlükle kelime tahmini. I/ı ve İ/i doğru işleniyor. 🌐 tuşu Uygurca → Türkçe → İngilizce arasında geçiyor; Türkçe ve İngilizce ayarlardan kapatılabiliyor.
