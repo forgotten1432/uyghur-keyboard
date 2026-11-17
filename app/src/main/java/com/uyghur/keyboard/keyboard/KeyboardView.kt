@@ -236,7 +236,8 @@ class KeyboardView(context: Context) : View(context) {
                 val label = enterLabel
                 if (label == null) drawEnterIcon(c, cx, cy, ink) else drawLabel(c, label, cx, cy, 15 * sp, ink, rect.width() - 6 * dp)
             }
-            KeyType.SPACE -> drawLabel(c, k.label, cx, cy, 13 * sp, t.hint, rect.width() - 8 * dp)
+            KeyType.SPACE -> if (k.label == "␣") drawSpaceIcon(c, cx, cy, ink)
+                else drawLabel(c, k.label, cx, cy, 13 * sp, t.hint, rect.width() - 8 * dp)
             KeyType.CHAR -> {
                 val size = if (k.big) 28 * sp else if (k.label.length > 1) 17 * sp else 23 * sp
                 drawLabel(c, k.label, cx, cy, size, ink, rect.width())
@@ -339,6 +340,14 @@ class KeyboardView(context: Context) : View(context) {
         c.drawLine(cx - r, cy, cx + r, cy, stroke)
         c.drawLine(cx - r * 0.85f, cy - r * 0.5f, cx + r * 0.85f, cy - r * 0.5f, stroke)
         c.drawLine(cx - r * 0.85f, cy + r * 0.5f, cx + r * 0.85f, cy + r * 0.5f, stroke)
+    }
+
+    private fun drawSpaceIcon(c: Canvas, cx: Float, cy: Float, color: Int) {
+        val w = 12 * dp; val h = 5 * dp
+        iconStroke(color, 2f)
+        path.reset()
+        path.moveTo(cx - w, cy - h / 2); path.lineTo(cx - w, cy + h / 2); path.lineTo(cx + w, cy + h / 2); path.lineTo(cx + w, cy - h / 2)
+        c.drawPath(path, stroke)
     }
 
     private fun drawGearIcon(c: Canvas, cx: Float, cy: Float, color: Int) {
