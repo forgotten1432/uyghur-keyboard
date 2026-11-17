@@ -3,6 +3,9 @@ name: Android Native Build
 on:
   workflow_dispatch: # Telefonda "Run workflow" butonunu aktif eder
 
+permissions:
+  contents: write   # needed to publish the APK as a GitHub Release
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -36,3 +39,16 @@ jobs:
         with:
           name: UyghurKeyboard-Debug
           path: app/build/outputs/apk/debug/app-debug.apk
+
+      # Every build is also published as a Release: the APK can be downloaded directly on the phone
+      # (Releases page → Assets), no zip and no login needed.
+      - name: Publish Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="build-${{ github.run_number }}"
+          cp app/build/outputs/apk/debug/app-debug.apk UyghurKeyboard.apk
+          PRE=""; [ "${{ github.ref_name }}" != "main" ] && PRE="--prerelease"
+          gh release create "$TAG" UyghurKeyboard.apk --target "${{ github.sha }}" $PRE \
+            --title "Uygurca Klavye — derleme ${{ github.run_number }} (${{ github.ref_name }})" \
+            --notes "Branch: ${{ github.ref_name }}, commit ${{ github.sha }}. Telefonda UyghurKeyboard.apk dosyasını indirip kur."
