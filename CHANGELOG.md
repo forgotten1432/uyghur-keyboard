@@ -1,5 +1,37 @@
 # Değişiklik kaydı
 
+## 1.2.0 — 2026-11-17
+
+### Yeni klavye görünümü (Samsung/Gboard tarzı)
+- Tüm klavye tek bir görünümde çiziliyor. Tuşlar arasında ölü bölge yok; her dokunuş en yakın tuşa gidiyor.
+- Telefonun açık/koyu teması izleniyor. Tuşlar yuvarlatılmış; simgeler (shift, silme, enter, dil, mikrofon) tek renk vektör.
+- Basınca harf baloncuğu çıkıyor. Uzun basınca alternatifler menüsü açılıyor; parmağı kaydırıp seçiliyor.
+- Üst sıradaki tuşlara uzun basınca rakamlar geliyor. Sayı satırı ayarlardan açılabiliyor.
+- Uygurca shift katmanında ژ ف گ خ ج ۆ var (standart düzen); eskiden yalnız uzun basmayla yazılabiliyordu. İngilizcede tek dokunuş tek büyük harf, çift dokunuş büyük harf kilidi.
+- Sembol tuşu iki sayfa sembol açıyor; Uygurcada ؟ ؛ ، « » dahil.
+
+### Yazma hissi
+- İki başparmakla hızlı yazma: yeni parmak dokunduğunda önceki tuş hemen yazılıyor.
+- Silme tuşu basılı tutulunca hızlanıyor; 1,5 saniyeden sonra kelime kelime siliyor.
+- Boşluk tuşunda parmağı sağa/sola kaydırınca imleç hareket ediyor.
+- İki kez boşluk ". " yazıyor. Öneri seçince boşluk otomatik ekleniyor; ardından noktalama yazılırsa boşluk noktalamanın arkasına geçiyor.
+- Enter tuşu uygulamaya göre değişiyor (ara, gönder, sonraki, tamam).
+- İngilizcede cümle başı otomatik büyük harf.
+- Sayı ve telefon alanlarında rakam/sembol sayfası açılıyor. Şifre alanlarında öneri ve öğrenme kapalı.
+- 🌐'ye uzun basınca sistemin klavye seçicisi açılıyor.
+
+### Kelime tahmini
+- 150 bin kelimelik Uygurca sözlük (önceden ~60 kelime) ve 30 bin kelimelik İngilizce sözlük.
+- Yazım hatası düzeltme: komşu tuşlar ve karışan harfler (ى/ې, ۇ/ۈ/ۆ, ك/گ …).
+- Boşluktan sonra sonraki kelime tahmini.
+- Öğrenilen kelimeler ve kelime çiftleri öne çıkıyor. Eski sürümde öğrenilen kelimeler aktarılıyor. Kayıt artık her tuşta değil, birkaç saniyede bir arka planda yapılıyor.
+- Öneri şeridi: en iyi tahmin ortada ve kalın; yazdığın kelime ile ikinci tahmin yanlarda.
+
+### Diğer
+- Uygulamanın internet izni kaldırıldı; klavye tamamen çevrimdışı.
+- Kurulum ekranı yenilendi: adım durumları, ayarlar (sayı satırı, ses, titreşim, öneriler) ve deneme alanı.
+- Paparazzi ile ekran görüntüsü testleri eklendi. Actions her derlemede klavyeyi çizip `screenshots` branch'ine koyuyor.
+
 ## 1.1.1 — 2026-11-17
 
 ### Sesle yazma

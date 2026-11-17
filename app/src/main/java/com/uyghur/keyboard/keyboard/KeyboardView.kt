@@ -112,7 +112,7 @@ class KeyboardView(context: Context) : View(context) {
 
     // ═══════════════════════════════ measure ═══════════════════════════════
 
-    private fun keyboardHeight() = stripH + rowH * layout.rows.size + bottomPad
+    private fun keyboardHeight() = stripH + rowH * layout.rows.sumOf { it.height.toDouble() }.toFloat() + bottomPad
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val w = MeasureSpec.getSize(widthMeasureSpec)
@@ -252,8 +252,9 @@ class KeyboardView(context: Context) : View(context) {
         val kw = v[2] - v[0] - 2 * gapX
         val bw = max(kw * 1.25f, 46 * dp)
         val bh = rowH * 1.08f
+        val kh = v[3] - v[1]
         val keyTop = v[1] + gapY
-        var top = keyTop - bh + rowH * 0.12f
+        var top = keyTop - bh + kh * 0.12f
         if (top < 2 * dp) top = 2 * dp
         var left = (v[0] + v[2]) / 2 - bw / 2
         left = left.coerceIn(2 * dp, width - bw - 2 * dp)
