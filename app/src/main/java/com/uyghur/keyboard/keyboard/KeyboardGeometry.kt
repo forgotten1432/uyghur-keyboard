@@ -24,7 +24,12 @@ class KeyboardGeometry(
     val rowHeight: Float,
 ) {
     val boxes: List<KeyBox>
-    val bottom: Float = top + rowHeight * layout.rows.size
+    /** Top edge of each row, plus the bottom edge of the last row. */
+    private val rowTops: FloatArray = FloatArray(layout.rows.size + 1).also { t ->
+        t[0] = top
+        layout.rows.forEachIndexed { r, row -> t[r + 1] = t[r] + rowHeight * row.height }
+    }
+    val bottom: Float = rowTops.last()
 
     init {
         val list = mutableListOf<KeyBox>()
@@ -32,14 +37,15 @@ class KeyboardGeometry(
             val units = row.keys.sumOf { it.width.toDouble() }.toFloat() + 2 * row.indent
             val unit = width / maxOf(10f, units)
             var x = (width - unit * (units - 2 * row.indent)) / 2
-            val y = top + r * rowHeight
+            val y = rowTops[r]
+            val h = rowTops[r + 1] - y
             for ((i, k) in row.keys.withIndex()) {
                 var l = x
                 var rgt = x + k.width * unit
                 // first/last key of an indented row also take the indent (touch area to the edge)
                 if (i == 0) l = 0f
                 if (i == row.keys.lastIndex) rgt = width
-                list += KeyBox(k, r, l, y, rgt, y + rowHeight)
+                list += KeyBox(k, r, l, y, rgt, y + h)
                 x += k.width * unit
             }
         }
@@ -63,7 +69,8 @@ class KeyboardGeometry(
     /** Key under (x, y); points above/below the keys snap to the first/last row. Null outside. */
     fun keyAt(x: Float, y: Float): KeyBox? {
         if (y < top - rowHeight * 0.25f || boxes.isEmpty()) return null
-        val r = ((y - top) / rowHeight).toInt().coerceIn(0, layout.rows.lastIndex)
+        var r = 0
+        while (r < layout.rows.lastIndex && y >= rowTops[r + 1]) r++
         val inRow = boxes.filter { it.row == r }
         return inRow.firstOrNull { x >= it.left && x < it.right }
             ?: inRow.minByOrNull { minOf(Math.abs(x - it.left), Math.abs(x - it.right)) }

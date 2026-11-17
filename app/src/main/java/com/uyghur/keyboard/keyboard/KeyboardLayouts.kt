@@ -17,7 +17,8 @@ data class Key(
     val hint: String? = null,
 )
 
-data class Row(val keys: List<Key>, val indent: Float = 0f)
+/** [height] is relative to a normal row (the number row is a bit lower, like on Samsung/Gboard). */
+data class Row(val keys: List<Key>, val indent: Float = 0f, val height: Float = 1f)
 
 data class Layout(val rows: List<Row>, val name: String)
 
@@ -34,7 +35,7 @@ object Layouts {
 
     private val DIGITS = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0")
 
-    fun numberRow() = Row(DIGITS.map { c(it) })
+    fun numberRow() = Row(DIGITS.map { c(it) }, height = 0.8f)
 
     // ─── Uyghur (standard Uyghur layout, same key positions as the Windows/UKIJ keyboard) ───
     private val UG_1 = listOf("چ", "ۋ", "ې", "ر", "ت", "ي", "ۇ", "ڭ", "و", "پ")

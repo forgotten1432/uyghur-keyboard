@@ -6,9 +6,23 @@ Android için Uygurca (Arap harfli) ve İngilizce klavye. **İnternetsiz çalı�
 
 ## Özellikler
 
-- **Uygurca Arap harfli düzen** ve **İngilizce QWERTY**. 🌐 tuşuyla aralarında geçilir; boşluk tuşunda o anki dil yazar.
-- **Uzun basınca alternatif harfler** ve rakam satırı.
-- **Kelime önerileri.** Yazdığın kelimeleri ve kelime sıralarını öğrenip sonraki sefer önerir. Uygurca kelime listesi `uyghur_words.txt` dosyasından güncellenir.
+- **Samsung/Gboard tarzı görünüm ve his:**
+  - Telefonun açık/koyu temasını izler.
+  - Tuşlar arasında ölü bölge yok; iki başparmakla hızlı yazılır.
+  - Basınca harf baloncuğu çıkar. Uzun basınca alternatifler menüsü açılır.
+  - Silme tuşu basılı tutulunca hızlanır ve kelime kelime siler.
+  - Boşluk tuşunda parmağı kaydırınca imleç hareket eder.
+  - İki kez boşluk ". " yazar.
+  - Enter tuşu uygulamaya göre "ئىزدە / يوللا / تامام" olur.
+- **Uygurca standart düzen** (Windows/UKIJ ile aynı tuş yerleri). Shift ile ژ ف گ خ ج ۆ gelir; üst sıradaki tuşlara uzun basınca rakamlar çıkar. **İngilizce QWERTY** için 🌐 tuşuna dokun; uzun basınca klavye seçici açılır.
+- **Kelime tahmini:**
+  - 150 bin kelimelik Uygurca sözlükle kelime tamamlama.
+  - Yanlış basılan komşu tuşları ve ى/ې, ۇ/ۈ gibi karışan harfleri düzeltme.
+  - Boşluktan sonra sonraki kelimeyi tahmin etme.
+  - Yazdıklarını öğrenir ve sonraki sefer onları öne çıkarır.
+  - Şifre alanlarında öneri yapmaz ve öğrenmez.
+- **Tamamen çevrimdışı:** uygulamanın internet izni yok.
+- **Ayarlar** (uygulamayı açınca): sayı satırı, tuş sesi, titreşim, kelime önerileri.
 - **Sesle yazma (Uygurca):**
   - Telefonun üzerinde çalışır; ses hiçbir yere gönderilmez.
   - 🎤'ye bir kez dokun, konuşmaya başla. Bitirmek için ⏹'ye dokun.
@@ -18,11 +32,11 @@ Android için Uygurca (Arap harfli) ve İngilizce klavye. **İnternetsiz çalı�
 ## Kurulum
 
 1. [Releases](https://github.com/forgotten1432/uyghur-keyboard/releases) sayfasından en yeni `UyghurKeyboard.apk` dosyasını telefona indir ve kur. Android "bilinmeyen kaynak" izni isteyebilir.
-2. **Uygurca Klavye** uygulamasını aç:
-   - **Klavyeyi etkinleştir** → ayarlarda klavyeyi aç.
-   - **Klavye seç** → Uygurca Klavye'yi seç.
-   - **Mikrofon izni ver** → sesle yazma için gerekli.
-3. Herhangi bir yazı alanında 🎤 tuşuna dokun.
+2. **Uygurca Klavye** uygulamasını aç ve üç adımı tamamla:
+   - **Klavyeyi etkinleştir:** ayarlarda klavyeyi aç.
+   - **Klavyeyi seç**
+   - **Mikrofon izni ver:** sesle yazma için gerekli.
+3. Sesle yazmak için öneri şeridinin solundaki mikrofona dokun.
 
 > Daha önce başka bir derlemeyi kurduysan ve yeni sürüm "paket çakışıyor" hatası verirse, önce eskisini kaldır. Actions derlemeleri her seferinde farklı bir debug anahtarıyla imzalanıyor.
 
@@ -51,10 +65,11 @@ Ayrıntılar için: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ```
 app/src/main/java/com/uyghur/keyboard/
-  UyghurKeyboardService.kt   klavye (tuşlar, öneriler, sesle yazma döngüsü)
-  SetupActivity.kt           kurulum ekranı
-  DictionaryHelper.kt        kelime önerileri ve öğrenme
-  KeyboardConstants.kt       tuş düzenleri
+  UyghurKeyboardService.kt   yazma mantığı, öneriler, sesle yazma döngüsü
+  SetupActivity.kt           kurulum ve ayarlar ekranı
+  KeyboardSettings.kt        ayarlar
+  keyboard/                  görünüm (KeyboardView), tuş düzenleri, dokunma geometrisi, tema
+  predict/                   kelime tahmini (sözlük, düzeltme, sonraki kelime, öğrenme)
   AudioRecorder.kt           mikrofon kaydı
   AsrEngine.kt               modeli yükleme ve çalıştırma
   asr/                       Android'den bağımsız ses tanıma mantığı (testli)
@@ -63,8 +78,8 @@ app/src/main/java/com/uyghur/keyboard/
     CharLanguageModel.kt       karakter 6-gram dil modeli
     UyghurScript.kt            Latin → Arap harfli Uygurca
     Resampler.kt               örnekleme hızı dönüştürme
-app/src/main/assets/          model (uyghur_asr_int8.onnx) ve dil modeli
-app/src/test/                 birim testleri
+app/src/main/assets/          ses modeli, dil modeli, sözlükler
+app/src/test/                 birim testleri ve ekran görüntüsü testleri (Paparazzi)
 model/                        eğitim için tam hassasiyetli model (Git LFS)
 tools/                        ölçüm, küçültme, dil modeli ve eğitim araçları
 samples/                      örnek ses kayıtları
@@ -72,7 +87,7 @@ samples/                      örnek ses kayıtları
 
 ## Derleme
 
-- **Telefondan:** GitHub → Actions → *Android Native Build* → *Run workflow*. Testler çalışır, APK derlenir ve otomatik olarak bir Release'e eklenir.
+- **Telefondan:** GitHub → Actions → *Android Native Build* → *Run workflow*. Testler çalışır, APK derlenir ve otomatik olarak bir Release'e eklenir. Klavyenin ekran görüntüleri de çizilip [`screenshots`](https://github.com/forgotten1432/uyghur-keyboard/tree/screenshots) branch'ine konur.
 - **Bilgisayardan:** Android Studio ile aç ya da `./gradlew assembleDebug` çalıştır. Testler için `./gradlew testDebugUnitTest`.
 
 ## Katkı ve geri bildirim
@@ -83,4 +98,6 @@ Yanlış tanınan bir cümle mi buldun? [Yanlış tanıma bildir](https://github
 
 - Ses modeli: THUYG-20 ile eğitilmiş CTC modeli ([gheyret/uyghur-asr-ctc](https://github.com/gheyret/uyghur-asr-ctc) ailesi)
 - Veri: [THUYG-20](http://www.openslr.org/22/), [Mozilla Common Voice](https://datacollective.mozillafoundation.org)
+- Uygurca sözlük: [Uyghur-LRs/Uyghur-Wordlist](https://github.com/Uyghur-LRs/Uyghur-Wordlist), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Web kelime sıklıkları yazım listeleriyle süzüldü (`tools/build_dictionary.py`).
+- İngilizce kelime sıklıkları: [wordfreq](https://github.com/rspeer/wordfreq). Veri [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); `english_dict.txt` da bu lisansla dağıtılır.
 - [ONNX Runtime](https://onnxruntime.ai)
