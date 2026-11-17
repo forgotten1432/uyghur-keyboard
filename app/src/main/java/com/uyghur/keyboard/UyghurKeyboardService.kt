@@ -22,7 +22,11 @@ import com.uyghur.keyboard.keyboard.KeyboardTheme
 import com.uyghur.keyboard.keyboard.KeyboardView
 import com.uyghur.keyboard.keyboard.Language
 import com.uyghur.keyboard.keyboard.Layouts
+import com.uyghur.keyboard.keyboard.Numpad
 import com.uyghur.keyboard.keyboard.ShiftState
+import com.uyghur.keyboard.predict.TextContext
+import android.content.Intent
+import java.util.Locale
 import com.uyghur.keyboard.predict.Bigrams
 import com.uyghur.keyboard.predict.Lexicon
 import com.uyghur.keyboard.predict.StripSlots
@@ -52,6 +56,7 @@ class UyghurKeyboardService : InputMethodService(), KeyboardView.Listener {
     private var shift = ShiftState.OFF
     private var lastShiftTap = 0L
     private var symbolsPage = 0                 // 0 = letters, 1/2 = symbol pages
+    private var numpad: Numpad? = null          // number-only fields get a calculator-style pad
     private var lastSpaceAt = 0L
     private var autoSpaced = false              // we added a space after a picked suggestion
     private var suggestionsAllowed = true
@@ -104,7 +109,15 @@ class UyghurKeyboardService : InputMethodService(), KeyboardView.Listener {
         )
         suggestionsAllowed = settings.suggestions && !password && !noSuggest && cls == InputType.TYPE_CLASS_TEXT
         learningAllowed = !password && !addressy
-        symbolsPage = if (cls == InputType.TYPE_CLASS_NUMBER || cls == InputType.TYPE_CLASS_PHONE || cls == InputType.TYPE_CLASS_DATETIME) 1 else 0
+        numpad = when (cls) {
+            InputType.TYPE_CLASS_NUMBER ->
+                if (type and InputType.TYPE_NUMBER_FLAG_DECIMAL != 0) Numpad.DECIMAL else Numpad.NUMBER
+            InputType.TYPE_CLASS_PHONE -> Numpad.PHONE
+            InputType.TYPE_CLASS_DATETIME -> Numpad.DATETIME
+            else -> null
+        }
+        symbolsPage = 0
+        if (language !in settings.enabledLanguages()) language = Language.UYGHUR
         if (!restarting || shift != ShiftState.LOCKED) shift = ShiftState.OFF
         autoSpaced = false
         applyAppearance()
@@ -146,10 +159,9 @@ class UyghurKeyboardService : InputMethodService(), KeyboardView.Listener {
 
     private fun refreshLayout() {
         val v = view ?: return
-        val layout = when {
+        val layout = numpad?.let { Layouts.numpad(it) } ?: when {
             symbolsPage > 0 -> Layouts.symbols(symbolsPage, language)
-            language == Language.UYGHUR -> Layouts.uyghur(shift, settings.numberRow)
-            else -> Layouts.english(shift, settings.numberRow)
+            else -> Layouts.letters(language, shift, settings.numberRow)
         }
         v.setLayout(layout)
         v.shiftState = shift
@@ -159,13 +171,17 @@ class UyghurKeyboardService : InputMethodService(), KeyboardView.Listener {
     private fun enterLabel(info: EditorInfo?): String? {
         info ?: return null
         if (info.imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION != 0) return null
-        val ug = language == Language.UYGHUR
+        val labels = when (language) {
+            Language.UYGHUR -> listOf("ئىزدە", "يوللا", "ماڭ", "كېيىنكى", "تامام")
+            Language.TURKISH -> listOf("Ara", "Gönder", "Git", "İleri", "Bitti")
+            Language.ENGLISH -> listOf("Search", "Send", "Go", "Next", "Done")
+        }
         return when (info.imeOptions and EditorInfo.IME_MASK_ACTION) {
-            EditorInfo.IME_ACTION_SEARCH -> if (ug) "ئىزدە" else "Search"
-            EditorInfo.IME_ACTION_SEND -> if (ug) "يوللا" else "Send"
-            EditorInfo.IME_ACTION_GO -> if (ug) "ماڭ" else "Go"
-            EditorInfo.IME_ACTION_NEXT -> if (ug) "كېيىنكى" else "Next"
-            EditorInfo.IME_ACTION_DONE -> if (ug) "تامام" else "Done"
+            EditorInfo.IME_ACTION_SEARCH -> labels[0]
+            EditorInfo.IME_ACTION_SEND -> labels[1]
+            EditorInfo.IME_ACTION_GO -> labels[2]
+            EditorInfo.IME_ACTION_NEXT -> labels[3]
+            EditorInfo.IME_ACTION_DONE -> labels[4]
             else -> null
         }
     }
@@ -174,22 +190,10 @@ class UyghurKeyboardService : InputMethodService(), KeyboardView.Listener {
 
     private fun before(n: Int = 64) = currentInputConnection?.getTextBeforeCursor(n, 0)?.toString().orEmpty()
 
-    private fun isWordChar(c: Char) = c.isLetter() || c == '’' || c == '\''
+    private fun isWordChar(c: Char) = TextContext.isWordChar(c)
 
-    /** The word being typed (letters right before the cursor) and the word before it. */
-    private fun currentAndPrevious(): Pair<String, String?> {
-        val b = before()
-        var i = b.length
-        while (i > 0 && isWordChar(b[i - 1])) i--
-        val cur = b.substring(i)
-        var j = i
-        while (j > 0 && b[j - 1] == ' ') j--
-        if (j > 0 && !isWordChar(b[j - 1])) return cur to null      // punctuation: new sentence context
-        var k = j
-        while (k > 0 && isWordChar(b[k - 1])) k--
-        val prev = b.substring(k, j).takeIf { it.isNotEmpty() && (j < i || cur.isEmpty()) }
-        return cur to prev
-    }
+    /** The word being typed and the two words before it (or the start of a sentence). */
+    private fun context() = TextContext.parse(before(96))
 
     override fun onText(text: String) {
         val ic = currentInputConnection ?: return
@@ -267,7 +271,8 @@ class UyghurKeyboardService : InputMethodService(), KeyboardView.Listener {
             KeyType.ALPHA -> { symbolsPage = 0; refreshLayout() }
             KeyType.SYMBOLS_PAGE -> { symbolsPage = if (symbolsPage == 1) 2 else 1; refreshLayout() }
             KeyType.LANGUAGE -> {
-                language = if (language == Language.UYGHUR) Language.ENGLISH else Language.UYGHUR
+                val langs = settings.enabledLanguages()
+                language = langs[(langs.indexOf(language) + 1) % langs.size]
                 settings.language = language.name
                 shift = ShiftState.OFF
                 view?.enterLabel = enterLabel(currentInputEditorInfo)
@@ -295,13 +300,17 @@ class UyghurKeyboardService : InputMethodService(), KeyboardView.Listener {
         sendDownUpKeyEvents(if (delta > 0) KeyEvent.KEYCODE_DPAD_RIGHT else KeyEvent.KEYCODE_DPAD_LEFT)
     }
 
+    override fun onSettings() {
+        startActivity(Intent(this, SetupActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
     override fun onLanguageLongPress() {
         (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showInputMethodPicker()
     }
 
     /** English: capitalise the first letter of a sentence (if the field asks for it). */
     private fun autoCapitalize(): Boolean {
-        if (language != Language.ENGLISH || symbolsPage > 0 || shift == ShiftState.LOCKED) return false
+        if (language == Language.UYGHUR || symbolsPage > 0 || numpad != null || shift == ShiftState.LOCKED) return false
         val info = currentInputEditorInfo ?: return false
         val caps = currentInputConnection?.getCursorCapsMode(info.inputType) ?: 0
         val want = if (caps != 0) ShiftState.ON else ShiftState.OFF
@@ -315,20 +324,29 @@ class UyghurKeyboardService : InputMethodService(), KeyboardView.Listener {
     private fun loadDictionaries() {
         asrScope.launch(Dispatchers.IO) {
             for (lang in Language.values()) {
-                val code = if (lang == Language.UYGHUR) "ug" else "en"
+                val code = lang.code
                 val history = try {
                     File(filesDir, "user_history_$code.txt").takeIf { it.exists() }?.readText()?.let(UserHistory::parse)
                 } catch (e: Exception) { null } ?: UserHistory()
                 if (lang == Language.UYGHUR) migrateOldDictionary(history)
                 try {
-                    val lexicon = assets.open(if (lang == Language.UYGHUR) "uyghur_dict.txt" else "english_dict.txt").use { Lexicon.load(it) }
+                    val dict = when (lang) {
+                        Language.UYGHUR -> "uyghur_dict.txt"
+                        Language.TURKISH -> "turkish_dict.txt"
+                        Language.ENGLISH -> "english_dict.txt"
+                    }
+                    val lexicon = assets.open(dict).use { Lexicon.load(it) }
                     val bigrams = if (lang == Language.UYGHUR) assets.open("uyghur_bigrams.txt").use { Bigrams.load(it) } else Bigrams.EMPTY
-                    val neighbours = Layouts.neighbours(
-                        if (lang == Language.UYGHUR) Layouts.uyghur(ShiftState.OFF, false) else Layouts.english(ShiftState.OFF, false))
+                    val neighbours = Layouts.neighbours(Layouts.letters(lang, ShiftState.OFF, false))
                     val p = WordPredictor(
                         lexicon, bigrams, neighbours, history,
                         if (lang == Language.UYGHUR) WordPredictor.UYGHUR_CONFUSABLE else emptyMap(),
-                        if (lang == Language.UYGHUR) WordPredictor.UYGHUR_ALPHABET else WordPredictor.ENGLISH_ALPHABET,
+                        when (lang) {
+                            Language.UYGHUR -> WordPredictor.UYGHUR_ALPHABET
+                            Language.TURKISH -> WordPredictor.TURKISH_ALPHABET
+                            Language.ENGLISH -> WordPredictor.ENGLISH_ALPHABET
+                        },
+                        if (lang == Language.TURKISH) Locale("tr", "TR") else Locale.ROOT,
                     )
                     withContext(Dispatchers.Main) {
                         histories[lang] = history
@@ -355,35 +373,40 @@ class UyghurKeyboardService : InputMethodService(), KeyboardView.Listener {
 
     private fun updateSuggestions() {
         val v = view ?: return
-        if (!suggestionsAllowed || symbolsPage > 0) { v.setSuggestions(listOf("", "", "")); return }
+        if (!suggestionsAllowed || symbolsPage > 0 || numpad != null) { v.setSuggestions(listOf("", "", "")); return }
         val p = predictors[language] ?: return
-        val (cur, prev) = currentAndPrevious()
-        if (cur.isEmpty() && before(1).let { it.isNotEmpty() && it[0] != ' ' }) { v.setSuggestions(listOf("", "", "")); return }
-        v.setSuggestions(StripSlots.arrange(p.suggest(prev, cur)))
+        val ctx = context()
+        if (ctx.current.isEmpty() && before(1).let { it.isNotEmpty() && it[0] != ' ' && it[0] != '\n' }) {
+            v.setSuggestions(listOf("", "", "")); return
+        }
+        v.setSuggestions(StripSlots.arrange(p.suggest(ctx)))
     }
 
     override fun onSuggestion(text: String) {
         val ic = currentInputConnection ?: return
-        val (cur, prev) = currentAndPrevious()
+        val ctx = context()
         ic.beginBatchEdit()
-        if (cur.isNotEmpty()) ic.deleteSurroundingText(cur.length, 0)
+        if (ctx.current.isNotEmpty()) ic.deleteSurroundingText(ctx.current.length, 0)
         ic.commitText("$text ", 1)
         ic.endBatchEdit()
-        learn(prev, text)
+        learn(ctx.previous, text, ctx.beforePrevious)
         autoSpaced = true
         lastSpaceAt = 0
         if (shift == ShiftState.ON) { shift = ShiftState.OFF; refreshLayout() }
     }
 
     private fun learnCurrentWord() {
-        val (cur, prev) = currentAndPrevious()
-        if (cur.length >= 2) learn(prev, cur)
+        val ctx = context()
+        if (ctx.current.length >= 2) learn(ctx.previous, ctx.current, ctx.beforePrevious)
     }
 
-    private fun learn(prev: String?, word: String) {
-        if (!learningAllowed) return
+    /** Remembers the word and the phrase it ends (so repeated phrases are predicted next time). */
+    private fun learn(prev: String?, word: String, prev2: String? = null) {
+        if (!learningAllowed || numpad != null) return
         val h = histories[language] ?: return
-        h.learn(prev?.lowercase(), word.lowercase())
+        val loc = if (language == Language.TURKISH) Locale("tr", "TR") else Locale.ROOT
+        fun low(s: String?) = s?.let { if (it == TextContext.START) it else it.lowercase(loc) }
+        h.learn(low(prev), word.lowercase(loc), low(prev2))
         main.removeCallbacks(saveHistory)
         main.postDelayed(saveHistory, 4000)
     }
@@ -393,7 +416,7 @@ class UyghurKeyboardService : InputMethodService(), KeyboardView.Listener {
         if (snapshot.isEmpty()) return
         asrScope.launch(Dispatchers.IO) {
             for ((lang, text) in snapshot) {
-                val code = if (lang == Language.UYGHUR) "ug" else "en"
+                val code = lang.code
                 try {
                     val tmp = File(filesDir, "user_history_$code.tmp")
                     tmp.writeText(text)

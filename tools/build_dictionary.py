@@ -4,13 +4,14 @@ Outputs (app/src/main/assets/):
   uyghur_dict.txt     word<TAB>frequency, sorted by word (Uyghur Arabic script)
   uyghur_bigrams.txt  word1 word2<TAB>count   (next-word prediction)
   english_dict.txt    word<TAB>frequency, sorted by word
+  turkish_dict.txt    word<TAB>frequency, sorted by word
 
 Sources:
   - Uyghur-LRs/Uyghur-Wordlist (CC BY 4.0, https://github.com/Uyghur-LRs/Uyghur-Wordlist):
       wordlist-Internet (2.3M words with web frequencies, contains misspellings)
       Sozler_all_in_one.txt + lexicon.dic (spelling word lists) -> used to filter misspellings
   - THUYG-20 transcripts (Latin, converted to Arabic script) -> bigrams
-  - wordfreq (Apache-2.0 code; data CC BY-SA 4.0) -> English
+  - wordfreq (Apache-2.0 code; data CC BY-SA 4.0) -> English, Turkish
 
 usage: python build_dictionary.py <Uyghur-Wordlist dir> <thuyg csv> [<thuyg csv> ...]
 """
@@ -19,6 +20,7 @@ import sys, os, re, zipfile, io, collections, math
 OUT = os.path.join(os.path.dirname(__file__), '..', 'app', 'src', 'main', 'assets')
 N_UYGHUR = 150_000
 N_ENGLISH = 30_000
+N_TURKISH = 50_000
 
 LETTERS = set('ابپتجچخدرزژسشغفقكگڭلمنھوۇۆۈۋېىيەئ')
 VOWELS = set('اەېىوۇۆۈ')
@@ -119,6 +121,13 @@ def main(wl_dir, thuyg_csvs):
         for w in sorted(words):
             o.write(f'{w}\t{max(1, int(round(10 ** wordfreq.zipf_frequency(w, "en"))))}\n')
     print('english words', len(words))
+
+    # 5. Turkish (lower-case with Turkish rules: I → ı, İ → i)
+    tr_words = [w for w in wordfreq.top_n_list('tr', N_TURKISH * 2) if re.fullmatch(r"[abcçdefgğhıijklmnoöprsştuüvyzâîû]+", w)][:N_TURKISH]
+    with open(os.path.join(OUT, 'turkish_dict.txt'), 'w', encoding='utf-8') as o:
+        for w in sorted(tr_words):
+            o.write(f'{w}\t{max(1, int(round(10 ** wordfreq.zipf_frequency(w, "tr"))))}\n')
+    print('turkish words', len(tr_words))
 
 
 if __name__ == '__main__':

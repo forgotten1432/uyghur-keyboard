@@ -90,32 +90,43 @@ class Bigrams(private val map: Map<String, Map<String, Int>>) {
 /** What the user has typed before. Learned words and word pairs outrank the base dictionary. */
 class UserHistory {
     val words = HashMap<String, Int>()
+    /** previous word → next word → count (previous may be TextContext.START) */
     val pairs = HashMap<String, HashMap<String, Int>>()
+    /** "word1 word2" → next word → count: remembers whole phrases you repeat */
+    val triples = HashMap<String, HashMap<String, Int>>()
     @Volatile var dirty = false
         private set
 
-    fun learn(previous: String?, word: String) {
+    fun learn(previous: String?, word: String, beforePrevious: String? = null) {
         if (word.isBlank()) return
         words[word] = (words[word] ?: 0) + 1
         if (!previous.isNullOrBlank()) {
-            val m = pairs.getOrPut(previous) { HashMap() }
-            m[word] = (m[word] ?: 0) + 1
+            pairs.getOrPut(previous) { HashMap() }.merge(word, 1, Int::plus)
+            if (!beforePrevious.isNullOrBlank()) triples.getOrPut(key(beforePrevious, previous)) { HashMap() }.merge(word, 1, Int::plus)
         }
         dirty = true
     }
 
+    fun pair(a: String?, b: String) = if (a == null) 0 else pairs[a]?.get(b) ?: 0
+    fun triple(a: String?, b: String?, c: String) = if (a == null || b == null) 0 else triples[key(a, b)]?.get(c) ?: 0
+    fun triplesAfter(a: String?, b: String?): Map<String, Int> = if (a == null || b == null) emptyMap() else triples[key(a, b)] ?: emptyMap()
+
     fun forget(word: String) {
         words.remove(word); pairs.remove(word); pairs.values.forEach { it.remove(word) }
+        triples.keys.removeAll { it.split(' ').contains(word) }; triples.values.forEach { it.remove(word) }
         dirty = true
     }
 
-    /** Lines: "w\tword\tcount" and "p\tword1\tword2\tcount". */
+    /** Lines: "w\tword\tcount", "p\tword1\tword2\tcount", "t\tword1 word2\tword3\tcount". */
     fun serialize(): String = buildString {
         for ((w, c) in words) append("w\t").append(w).append('\t').append(c).append('\n')
         for ((a, m) in pairs) for ((b, c) in m) append("p\t").append(a).append('\t').append(b).append('\t').append(c).append('\n')
+        for ((ab, m) in triples) for ((c, n) in m) append("t\t").append(ab).append('\t').append(c).append('\t').append(n).append('\n')
     }.also { dirty = false }
 
     companion object {
+        private fun key(a: String, b: String) = "$a $b"
+
         fun parse(text: String): UserHistory {
             val h = UserHistory()
             for (line in text.lineSequence()) {
@@ -123,6 +134,7 @@ class UserHistory {
                 when {
                     f.size == 3 && f[0] == "w" -> h.words[f[1]] = f[2].toIntOrNull() ?: continue
                     f.size == 4 && f[0] == "p" -> h.pairs.getOrPut(f[1]) { HashMap() }[f[2]] = f[3].toIntOrNull() ?: continue
+                    f.size == 4 && f[0] == "t" -> h.triples.getOrPut(f[1]) { HashMap() }[f[2]] = f[3].toIntOrNull() ?: continue
                 }
             }
             return h
@@ -144,6 +156,8 @@ class WordPredictor(
     private val confusable: Map<Char, Set<Char>> = emptyMap(),
     /** All letters of the alphabet (for insertions in typo corrections). */
     private val alphabet: String = "",
+    /** For lower/upper case (Turkish I/ı, İ/i). */
+    private val locale: java.util.Locale = java.util.Locale.ROOT,
 ) {
     data class Suggestions(
         /** What is being typed (may be empty). */
@@ -156,19 +170,27 @@ class WordPredictor(
 
     private fun base(w: String) = ln(1.0 + lexicon.freq(w))
     private fun userScore(w: String) = 3.0 * ln(1.0 + (user.words[w] ?: 0))
+    private var prev2: String? = null      // word before the previous one (set per suggest() call)
+
     private fun context(prev: String?, w: String): Double {
         if (prev.isNullOrEmpty()) return 0.0
-        val c = bigrams.count(prev, w) + 4 * (user.pairs[prev]?.get(w) ?: 0)
-        return 2.5 * ln(1.0 + c)
+        val c = bigrams.count(prev, w) + 4 * user.pair(prev, w)
+        val t = user.triple(prev2, prev, w)
+        return 2.5 * ln(1.0 + c) + 3.0 * ln(1.0 + 4 * t)
     }
 
     private fun known(w: String) = w in lexicon || (user.words[w] ?: 0) > 0
 
     fun score(prev: String?, w: String) = base(w) + userScore(w) + context(prev, w)
 
-    fun suggest(previous: String?, typed: String, n: Int = 3): Suggestions {
-        val prev = previous?.lowercase()
-        val t = typed.lowercase()
+    private fun lower(s: String?) = s?.let { if (it == TextContext.START) it else it.lowercase(locale) }
+
+    fun suggest(context: TextContext, n: Int = 3) = suggest(context.previous, context.current, n, context.beforePrevious)
+
+    fun suggest(previous: String?, typed: String, n: Int = 3, beforePrevious: String? = null): Suggestions {
+        val prev = lower(previous)
+        prev2 = lower(beforePrevious)
+        val t = typed.lowercase(locale)
         if (t.isEmpty()) return Suggestions("", nextWords(prev, n), false)
 
         val cand = HashMap<String, Double>()
@@ -179,7 +201,7 @@ class WordPredictor(
         comp.forEach { w -> add(w, score(prev, w) - 0.15 * (w.length - t.length)) }
         user.words.keys.filter { it.startsWith(t) }.forEach { w -> add(w, score(prev, w) - 0.15 * (w.length - t.length)) }
         if (!prev.isNullOrEmpty()) {
-            (bigrams.followers(prev).keys + (user.pairs[prev]?.keys ?: emptySet()))
+            (bigrams.followers(prev).keys + (user.pairs[prev]?.keys ?: emptySet()) + user.triplesAfter(prev2, prev).keys)
                 .filter { it.startsWith(t) }.forEach { w -> add(w, score(prev, w)) }
         }
 
@@ -201,11 +223,13 @@ class WordPredictor(
         return Suggestions(typed, ranked, typedKnown)
     }
 
+    /** Next-word prediction: your own phrases (last two words) first, then your word pairs, then the corpus. */
     private fun nextWords(prev: String?, n: Int): List<String> {
         if (prev.isNullOrEmpty()) return emptyList()
         val c = HashMap<String, Double>()
-        for ((w, k) in bigrams.followers(prev)) c[w] = ln(1.0 + k) + 0.1 * base(w)
+        if (prev != TextContext.START) for ((w, k) in bigrams.followers(prev)) c[w] = ln(1.0 + k) + 0.1 * base(w)
         for ((w, k) in user.pairs[prev] ?: emptyMap<String, Int>()) c[w] = (c[w] ?: 0.0) + 2.0 * ln(1.0 + 4 * k) + 1.0
+        for ((w, k) in user.triplesAfter(prev2, prev)) c[w] = (c[w] ?: 0.0) + 3.0 * ln(1.0 + 4 * k) + 2.0
         return c.entries.sortedByDescending { it.value }.take(n).map { it.key }
     }
 
@@ -244,7 +268,7 @@ class WordPredictor(
     }
 
     private fun restoreCase(typed: String, w: String): String =
-        if (typed.isNotEmpty() && typed[0].isUpperCase() && w.isNotEmpty()) w.replaceFirstChar { it.uppercaseChar() } else w
+        if (typed.isNotEmpty() && typed[0].isUpperCase() && w.isNotEmpty()) w.substring(0, 1).uppercase(locale) + w.substring(1) else w
 
     companion object {
         val UYGHUR_CONFUSABLE: Map<Char, Set<Char>> = listOf(
@@ -252,5 +276,6 @@ class WordPredictor(
         ).flatMap { listOf(it[0] to it[1], it[1] to it[0]) }.groupBy({ it.first }, { it.second }).mapValues { it.value.toSet() }
         const val UYGHUR_ALPHABET = "ابپتجچخدرزژسشغفقكگڭلمنھوۇۆۈۋېىيەئ"
         const val ENGLISH_ALPHABET = "abcdefghijklmnopqrstuvwxyz"
+        const val TURKISH_ALPHABET = "abcçdefgğhıijklmnoöprsştuüvyz"
     }
 }

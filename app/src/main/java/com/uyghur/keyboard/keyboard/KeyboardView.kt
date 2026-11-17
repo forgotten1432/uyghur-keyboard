@@ -34,6 +34,7 @@ class KeyboardView(context: Context) : View(context) {
         fun onSuggestion(text: String)
         fun onMicTap()
         fun onLanguageLongPress()
+        fun onSettings()
     }
 
     enum class Dictation { OFF, LISTENING, FINISHING }
@@ -165,6 +166,14 @@ class KeyboardView(context: Context) : View(context) {
 
         val left = micW + 4 * dp
         val w = width - left
+        if (dictation == Dictation.OFF && slots.all { it.isEmpty() }) {
+            // nothing to suggest: show the settings button on the right (like Samsung's toolbar)
+            val gx = width - micW / 2
+            val pressed = pointers.values.any { it.stripTarget == 3 }
+            if (pressed) { fill.color = t.keyPressed; c.drawCircle(gx, cy, 18 * dp, fill) }
+            drawGearIcon(c, gx, cy, t.text)
+            return
+        }
         if (dictation != Dictation.OFF) {
             text.color = t.hint; text.typeface = Typeface.DEFAULT; text.textSize = 15 * sp
             val label = dictationText.ifEmpty { if (dictation == Dictation.LISTENING) "ئاڭلاۋاتىدۇ…" else "…" }
@@ -229,7 +238,7 @@ class KeyboardView(context: Context) : View(context) {
             }
             KeyType.SPACE -> drawLabel(c, k.label, cx, cy, 13 * sp, t.hint, rect.width() - 8 * dp)
             KeyType.CHAR -> {
-                val size = if (k.label.length > 1) 17 * sp else 23 * sp
+                val size = if (k.big) 28 * sp else if (k.label.length > 1) 17 * sp else 23 * sp
                 drawLabel(c, k.label, cx, cy, size, ink, rect.width())
                 k.hint?.let { h ->
                     text.textSize = 10.5f * sp; text.color = t.hint; text.typeface = Typeface.DEFAULT
@@ -330,6 +339,24 @@ class KeyboardView(context: Context) : View(context) {
         c.drawLine(cx - r, cy, cx + r, cy, stroke)
         c.drawLine(cx - r * 0.85f, cy - r * 0.5f, cx + r * 0.85f, cy - r * 0.5f, stroke)
         c.drawLine(cx - r * 0.85f, cy + r * 0.5f, cx + r * 0.85f, cy + r * 0.5f, stroke)
+    }
+
+    private fun drawGearIcon(c: Canvas, cx: Float, cy: Float, color: Int) {
+        val r = 7.5f * dp
+        iconStroke(color, 1.8f)
+        c.drawCircle(cx, cy, r * 0.42f, stroke)
+        path.reset()
+        for (i in 0 until 16) {                       // 8 teeth: alternate outer/inner radius
+            val a = Math.PI * 2 * i / 16 - Math.PI / 16
+            val rr = if (i % 2 == 0) r * 1.25f else r * 0.95f
+            val a2 = a + Math.PI * 2 / 16
+            val x1 = cx + rr * Math.cos(a).toFloat(); val y1 = cy + rr * Math.sin(a).toFloat()
+            val x2 = cx + rr * Math.cos(a2).toFloat(); val y2 = cy + rr * Math.sin(a2).toFloat()
+            if (i == 0) path.moveTo(x1, y1) else path.lineTo(x1, y1)
+            path.lineTo(x2, y2)
+        }
+        path.close()
+        c.drawPath(path, stroke)
     }
 
     private fun drawMicIcon(c: Canvas, cx: Float, cy: Float, scale: Float, color: Int) {
@@ -481,6 +508,7 @@ class KeyboardView(context: Context) : View(context) {
             val target = stripTargetAt(x)
             if (target == p.stripTarget && y < stripH * 1.4f) {
                 if (target == -1) { feedback(null); listener?.onMicTap() }
+                else if (target == 3) { feedback(null); listener?.onSettings() }
                 else slots.getOrNull(target)?.takeIf { it.isNotEmpty() && dictation == Dictation.OFF }?.let {
                     feedback(null); listener?.onSuggestion(it)
                 }
@@ -502,6 +530,7 @@ class KeyboardView(context: Context) : View(context) {
     private fun stripTargetAt(x: Float): Int {
         if (x < micW) return -1
         if (dictation != Dictation.OFF) return -3
+        if (slots.all { it.isEmpty() }) return if (x > width - micW) 3 else -3
         val slotW = (width - micW - 4 * dp) / 3
         return ((x - micW - 4 * dp) / slotW).toInt().coerceIn(0, 2)
     }

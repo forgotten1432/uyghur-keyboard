@@ -7,6 +7,7 @@ import com.uyghur.keyboard.keyboard.KeyboardTheme
 import com.uyghur.keyboard.keyboard.KeyboardView
 import com.uyghur.keyboard.keyboard.Language
 import com.uyghur.keyboard.keyboard.Layouts
+import com.uyghur.keyboard.keyboard.Numpad
 import com.uyghur.keyboard.keyboard.ShiftState
 import org.junit.Rule
 import org.junit.Test
@@ -56,6 +57,13 @@ class KeyboardScreenshotTest {
     @Test fun longPressPopup() = paparazzi.snapshot(keyboard().apply { debugPress(".", popup = true) })
 
     @Test fun longPressTopRow() = paparazzi.snapshot(keyboard(theme = KeyboardTheme.DARK).apply { debugPress("ۋ", popup = true) })
+
+    @Test fun turkishLight() = paparazzi.snapshot(keyboard(
+        layout = Layouts.turkish(ShiftState.OFF, false), slots = listOf("nası", "nasıl", "nasılsın")))
+
+    @Test fun numberPadDark() = paparazzi.snapshot(keyboard(theme = KeyboardTheme.DARK, layout = Layouts.numpad(Numpad.DECIMAL), enter = "Bitti"))
+
+    @Test fun phonePadLight() = paparazzi.snapshot(keyboard(layout = Layouts.numpad(Numpad.PHONE)))
 
     @Test fun dictating() = paparazzi.snapshot(keyboard().apply { dictation = KeyboardView.Dictation.LISTENING })
 }

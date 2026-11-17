@@ -74,6 +74,11 @@ class SetupActivity : AppCompatActivity() {
         col.addView(toggle("تىترەش · Titreşim", settings.vibration) { settings.vibration = it })
         col.addView(toggle("سۆز تەۋسىيەسى · Kelime önerileri", settings.suggestions) { settings.suggestions = it })
 
+        col.addView(text("تىللار · Diller (🌐)", 16f, accent).apply { setPadding(0, dp(24), 0, dp(6)) })
+        col.addView(toggle("ئۇيغۇرچە", true) {}.apply { isEnabled = false })
+        col.addView(toggle("Türkçe", settings.turkish) { settings.turkish = it })
+        col.addView(toggle("English", settings.english) { settings.english = it })
+
         col.addView(text("سىناپ بېقىڭ · Burada dene", 16f, accent).apply { setPadding(0, dp(24), 0, dp(6)) })
         col.addView(EditText(this).apply {
             hint = "بۇ يەرگە يېزىڭ…"

@@ -1,5 +1,14 @@
 # Değişiklik kaydı
 
+## 1.3.0 — 2026-11-17
+
+- **Türkçe klavye:** Türkçe Q düzeni (ğ ü ş ı i ö ç) ve 50 bin kelimelik Türkçe sözlükle kelime tahmini. I/ı ve İ/i doğru işleniyor. 🌐 tuşu Uygurca → Türkçe → İngilizce arasında geçiyor; Türkçe ve İngilizce ayarlardan kapatılabiliyor.
+- **Cümle tahmini ve alışkanlık (bütün dillerde):**
+  - Tahmin son iki kelimeye bakıyor; sık yazdığın ifadeleri ezberliyor. Örn. ئەسسالامۇ'dan sonra ئەلەيكۇم, ardından قانداق.
+  - Cümleye nasıl başladığını da öğreniyor: boş alanda ilk kelimeni öneriyor.
+- **Hesap makinesi tipi tuş takımı:** sayı, tutar, telefon ve tarih alanlarında büyük tuşlu 4×4 tuş takımı açılıyor. Telefon takımında 0'a uzun basınca +, - tuşunda ( ) / . var.
+- **Ayarlara klavyeden ulaşım:** öneri yokken şeridin sağında ⚙ çıkıyor. Sayı satırı, diller, ses ve titreşim oradan değiştirilebiliyor.
+
 ## 1.2.0 — 2026-11-17
 
 ### Yeni klavye görünümü (Samsung/Gboard tarzı)

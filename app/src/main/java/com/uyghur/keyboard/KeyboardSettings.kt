@@ -26,6 +26,21 @@ class KeyboardSettings(context: Context) {
         get() = prefs.getBoolean("suggestions", true)
         set(v) = prefs.edit().putBoolean("suggestions", v).apply()
 
+    var turkish: Boolean
+        get() = prefs.getBoolean("lang_tr", true)
+        set(v) = prefs.edit().putBoolean("lang_tr", v).apply()
+
+    var english: Boolean
+        get() = prefs.getBoolean("lang_en", true)
+        set(v) = prefs.edit().putBoolean("lang_en", v).apply()
+
+    /** Languages the 🌐 key cycles through (Uyghur is always on). */
+    fun enabledLanguages(): List<com.uyghur.keyboard.keyboard.Language> = buildList {
+        add(com.uyghur.keyboard.keyboard.Language.UYGHUR)
+        if (turkish) add(com.uyghur.keyboard.keyboard.Language.TURKISH)
+        if (english) add(com.uyghur.keyboard.keyboard.Language.ENGLISH)
+    }
+
     /** Last used language (so the keyboard opens in the same language). */
     var language: String
         get() = prefs.getString("language", "UYGHUR") ?: "UYGHUR"

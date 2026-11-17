@@ -14,15 +14,20 @@ Android için Uygurca (Arap harfli) ve İngilizce klavye. **İnternetsiz çalı�
   - Boşluk tuşunda parmağı kaydırınca imleç hareket eder.
   - İki kez boşluk ". " yazar.
   - Enter tuşu uygulamaya göre "ئىزدە / يوللا / تامام" olur.
-- **Uygurca standart düzen** (Windows/UKIJ ile aynı tuş yerleri). Shift ile ژ ف گ خ ج ۆ gelir; üst sıradaki tuşlara uzun basınca rakamlar çıkar. **İngilizce QWERTY** için 🌐 tuşuna dokun; uzun basınca klavye seçici açılır.
-- **Kelime tahmini:**
-  - 150 bin kelimelik Uygurca sözlükle kelime tamamlama.
+- **Diller:**
+  - **Uygurca standart düzen** (Windows/UKIJ ile aynı tuş yerleri). Shift ile ژ ف گ خ ج ۆ gelir.
+  - **Türkçe Q** ve **İngilizce QWERTY**.
+  - 🌐 tuşu diller arasında geçer; uzun basınca sistemin klavye seçicisi açılır.
+  - Üst sıradaki tuşlara uzun basınca rakamlar çıkar. İstersen sayı satırını ayarlardan açabilirsin.
+- **Sayı alanlarında hesap makinesi tipi tuş takımı** (sayı, tutar, telefon, tarih).
+- **Kelime ve cümle tahmini (Uygurca, Türkçe, İngilizce):**
+  - Sözlüklerle kelime tamamlama: Uygurca 150 bin, Türkçe 50 bin, İngilizce 30 bin kelime.
+  - Son iki kelimeye bakarak sonraki kelimeyi tahmin etme. Sık yazdığın ifadeleri (ör. ئەسسالامۇ ئەلەيكۇم) ve cümleye nasıl başladığını öğrenir.
   - Yanlış basılan komşu tuşları ve ى/ې, ۇ/ۈ gibi karışan harfleri düzeltme.
-  - Boşluktan sonra sonraki kelimeyi tahmin etme.
   - Yazdıklarını öğrenir ve sonraki sefer onları öne çıkarır.
   - Şifre alanlarında öneri yapmaz ve öğrenmez.
 - **Tamamen çevrimdışı:** uygulamanın internet izni yok.
-- **Ayarlar** (uygulamayı açınca): sayı satırı, tuş sesi, titreşim, kelime önerileri.
+- **Ayarlar:** uygulamayı açarak ya da öneri şeridindeki ⚙ ile. Sayı satırı, diller, tuş sesi, titreşim, kelime önerileri.
 - **Sesle yazma (Uygurca):**
   - Telefonun üzerinde çalışır; ses hiçbir yere gönderilmez.
   - 🎤'ye bir kez dokun, konuşmaya başla. Bitirmek için ⏹'ye dokun.
@@ -99,5 +104,5 @@ Yanlış tanınan bir cümle mi buldun? [Yanlış tanıma bildir](https://github
 - Ses modeli: THUYG-20 ile eğitilmiş CTC modeli ([gheyret/uyghur-asr-ctc](https://github.com/gheyret/uyghur-asr-ctc) ailesi)
 - Veri: [THUYG-20](http://www.openslr.org/22/), [Mozilla Common Voice](https://datacollective.mozillafoundation.org)
 - Uygurca sözlük: [Uyghur-LRs/Uyghur-Wordlist](https://github.com/Uyghur-LRs/Uyghur-Wordlist), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Web kelime sıklıkları yazım listeleriyle süzüldü (`tools/build_dictionary.py`).
-- İngilizce kelime sıklıkları: [wordfreq](https://github.com/rspeer/wordfreq). Veri [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); `english_dict.txt` da bu lisansla dağıtılır.
+- İngilizce ve Türkçe kelime sıklıkları: [wordfreq](https://github.com/rspeer/wordfreq). Veri [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); `english_dict.txt` ve `turkish_dict.txt` de bu lisansla dağıtılır.
 - [ONNX Runtime](https://onnxruntime.ai)

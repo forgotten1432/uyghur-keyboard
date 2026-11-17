@@ -15,6 +15,8 @@ data class Key(
     val popup: List<String> = emptyList(),
     /** Small hint drawn in the key's corner (usually popup[0]). */
     val hint: String? = null,
+    /** Large label (number pad digits). */
+    val big: Boolean = false,
 )
 
 /** [height] is relative to a normal row (the number row is a bit lower, like on Samsung/Gboard). */
@@ -22,10 +24,14 @@ data class Row(val keys: List<Key>, val indent: Float = 0f, val height: Float = 
 
 data class Layout(val rows: List<Row>, val name: String)
 
-enum class Language(val label: String, val rtl: Boolean) {
-    UYGHUR("ئۇيغۇرچە", true),
-    ENGLISH("English", false),
+enum class Language(val label: String, val rtl: Boolean, val code: String) {
+    UYGHUR("ئۇيغۇرچە", true, "ug"),
+    TURKISH("Türkçe", false, "tr"),
+    ENGLISH("English", false, "en"),
 }
+
+/** Calculator-style keypads for number-only fields. */
+enum class Numpad { NUMBER, DECIMAL, PHONE, DATETIME }
 
 enum class ShiftState { OFF, ON, LOCKED }
 
@@ -102,6 +108,65 @@ object Layouts {
             Key(KeyType.BACKSPACE, "⌫", width = 1.5f))
         rows += bottomRow(Language.ENGLISH)
         return Layout(rows, "english" + if (up) "-shift" else "")
+    }
+
+    // ─── Turkish Q (12 keys per row, like Samsung/Gboard Türkçe Q) ───
+    private val TR = java.util.Locale("tr", "TR")
+    private val TR_1 = listOf("q", "w", "e", "r", "t", "y", "u", "ı", "o", "p", "ğ", "ü")
+    private val TR_2 = listOf("a", "s", "d", "f", "g", "h", "j", "k", "l", "ş", "i")
+    private val TR_3 = listOf("z", "x", "c", "v", "b", "n", "m", "ö", "ç")
+    private val TR_EXTRA = mapOf(
+        "a" to listOf("â"), "i" to listOf("î"), "u" to listOf("û"), "e" to listOf("é"), "o" to listOf("ô"),
+    )
+
+    fun turkish(shift: ShiftState, numberRow: Boolean): Layout {
+        val up = shift != ShiftState.OFF
+        fun letter(ch: String): Key {
+            val popup = (TR_EXTRA[ch] ?: emptyList()).map { if (up) it.uppercase(TR) else it }
+            return c(if (up) ch.uppercase(TR) else ch, popup, hint = false)
+        }
+        val top = TR_1.mapIndexed { i, ch ->
+            val k = letter(ch)
+            if (numberRow || i >= 10) k else k.copy(popup = listOf(DIGITS[i]) + k.popup, hint = DIGITS[i])
+        }
+        val rows = mutableListOf<Row>()
+        if (numberRow) rows += numberRow()
+        rows += Row(top)
+        rows += Row(TR_2.map(::letter), indent = 0.5f)
+        rows += Row(listOf(Key(KeyType.SHIFT, "⇧", width = 1.5f)) + TR_3.map(::letter) +
+            Key(KeyType.BACKSPACE, "⌫", width = 1.5f))
+        rows += bottomRow(Language.TURKISH)
+        return Layout(rows, "turkish" + if (up) "-shift" else "")
+    }
+
+    fun letters(lang: Language, shift: ShiftState, numberRow: Boolean) = when (lang) {
+        Language.UYGHUR -> uyghur(shift, numberRow)
+        Language.TURKISH -> turkish(shift, numberRow)
+        Language.ENGLISH -> english(shift, numberRow)
+    }
+
+    // ─── Number pads (4 × 4, big keys) ───
+    fun numpad(kind: Numpad): Layout {
+        fun d(s: String, popup: List<String> = emptyList()) = Key(KeyType.CHAR, s, s, 2.5f, popup, null, big = true)
+        fun f(s: String, popup: List<String> = emptyList()) = Key(KeyType.CHAR, s, s, 2.5f, popup, null)
+        val side = when (kind) {
+            Numpad.PHONE -> listOf(f("-", listOf("(", ")", "/", ".")), Key(KeyType.SPACE, "␣", " ", 2.5f))
+            Numpad.DATETIME -> listOf(f("-"), f(":"))
+            else -> listOf(f("-"), Key(KeyType.SPACE, "␣", " ", 2.5f))
+        }
+        val bottom = when (kind) {
+            Numpad.PHONE -> listOf(f("*", listOf("#", ",", ";")), d("0", listOf("+")), f("#"))
+            Numpad.DATETIME -> listOf(f("/"), d("0"), f("."))
+            Numpad.DECIMAL -> listOf(f(","), d("0"), f("."))
+            Numpad.NUMBER -> listOf(f(","), d("0"), f("."))
+        }
+        val rows = listOf(
+            Row(listOf(d("1"), d("2"), d("3"), side[0])),
+            Row(listOf(d("4"), d("5"), d("6"), side[1])),
+            Row(listOf(d("7"), d("8"), d("9"), Key(KeyType.BACKSPACE, "⌫", width = 2.5f))),
+            Row(bottom + Key(KeyType.ENTER, "↵", "\n", width = 2.5f)),
+        )
+        return Layout(rows, "numpad-" + kind.name.lowercase())
     }
 
     private fun comma(lang: Language) = if (lang == Language.UYGHUR)
