@@ -17,3 +17,5 @@ local.properties
 app/release.jks
 app/build/
 build/
+__pycache__/
+*.pyc

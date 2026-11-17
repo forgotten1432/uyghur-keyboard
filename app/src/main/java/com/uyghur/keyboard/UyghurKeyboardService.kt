@@ -16,6 +16,7 @@ import android.util.TypedValue
 import android.graphics.Typeface
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.*
+import com.uyghur.keyboard.asr.SpeechSegmenter
 
 /**
  * UyghurKeyboardService — The core IME service for the Uyghur keyboard.
@@ -65,10 +66,11 @@ class UyghurKeyboardService : InputMethodService() {
 
     // ─── ASR Components ─────────────────────────────────────────────
     private var asrEngine: AsrEngine? = null
-    private var asrLoading = false
+    private var asrLoad: Deferred<AsrEngine?>? = null
     private val audioRecorder = AudioRecorder()
     private var micButton: Button? = null
-    private val asrScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val asrScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private var transcribing = false
 
     // ─── Utilities ──────────────────────────────────────────────────
     // Precompiled regex for fluid, instant typing performance
@@ -131,6 +133,12 @@ class UyghurKeyboardService : InputMethodService() {
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         Log.d(TAG, "onStartInputView: Keyboard shown (restarting=$restarting)")
+    }
+
+    override fun onFinishInputView(finishingInput: Boolean) {
+        // keyboard hidden while dictating: stop the microphone (the last phrase is still committed)
+        if (audioRecorder.isRecording()) stopDictation()
+        super.onFinishInputView(finishingInput)
     }
 
     override fun onFinishInput() {
@@ -472,7 +480,11 @@ class UyghurKeyboardService : InputMethodService() {
      */
     private fun createMicKey(weight: Float): Button {
         return Button(this).apply {
-            text = if (audioRecorder.isRecording()) "⏹" else "🎤"
+            text = when {
+                transcribing -> "⏳"
+                audioRecorder.isRecording() -> "⏹"
+                else -> "🎤"
+            }
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
             setBackgroundResource(R.drawable.key_background_special)
             isAllCaps = false
@@ -485,26 +497,13 @@ class UyghurKeyboardService : InputMethodService() {
 
             contentDescription = getString(R.string.key_microphone)
 
-            setOnTouchListener { view, event ->
+            // Tap to start, tap again to stop (text appears while you speak).
+            setOnClickListener { view ->
                 try {
-                    when (event.action) {
-                        android.view.MotionEvent.ACTION_DOWN -> {
-                            Log.d(TAG, "🎤 Mic button ACTION_DOWN")
-                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                            startRecordingIfReady()
-                            true
-                        }
-                        android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
-                            Log.d(TAG, "🎤 Mic button ACTION_UP")
-                            stopRecordingAndTranscribe()
-                            view.performClick()
-                            true
-                        }
-                        else -> false
-                    }
+                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    toggleDictation()
                 } catch (e: Exception) {
-                    Log.e(TAG, "Mic touch error", e)
-                    false
+                    Log.e(TAG, "Mic tap error", e)
                 }
             }
 
@@ -700,36 +699,45 @@ class UyghurKeyboardService : InputMethodService() {
     /**
      * Preloads the ASR engine asynchronously. 
      */
-    private fun preloadAsrEngine() {
-        if (asrEngine != null || asrLoading) {
-            Log.d(TAG, "preloadAsrEngine: already loaded or loading, skip")
-            return
-        }
-        asrLoading = true
+    private fun preloadAsrEngine(): Deferred<AsrEngine?> {
+        asrLoad?.let { if (!it.isCompleted || asrEngine != null) return it }
         Log.d(TAG, "preloadAsrEngine: starting async load...")
-        asrScope.launch {
+        val job = asrScope.async(Dispatchers.IO) {
             try {
-                val engine = AsrEngine(this@UyghurKeyboardService)
-                withContext(Dispatchers.Main) {
-                    asrEngine = engine
-                    asrLoading = false
+                AsrEngine(this@UyghurKeyboardService).also {
+                    asrEngine = it
                     Log.d(TAG, "ASR engine preloaded successfully ✅")
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 Log.e(TAG, "Failed to load ASR engine: ${e.message}", e)
                 withContext(Dispatchers.Main) {
-                    asrLoading = false
                     Toast.makeText(this@UyghurKeyboardService, "ASR يۈكلەنمىدى: ${e.message}", Toast.LENGTH_LONG).show()
                 }
+                null
             }
+        }
+        asrLoad = job
+        return job
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // LIVE DICTATION  (tap 🎤 to start, tap ⏹ to stop)
+    // ═══════════════════════════════════════════════════════════════
+
+    private var dictationJob: Job? = null
+    private var segmentPrefix: String? = null      // " " or "" for the segment being shown
+    private var composingShown = false
+
+    private fun toggleDictation() {
+        when {
+            transcribing -> Unit                                  // finishing the last words
+            audioRecorder.isRecording() -> stopDictation()
+            else -> startDictation()
         }
     }
 
-    /**
-     * Starts recording instantly for quick push-to-talk.
-     */
-    private fun startRecordingIfReady() {
-        Log.d(TAG, "startRecordingIfReady called")
+    private fun startDictation() {
+        Log.d(TAG, "startDictation called")
         // Check RECORD_AUDIO permission
         val hasPerm = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         Log.d(TAG, "RECORD_AUDIO permission granted: $hasPerm")
@@ -739,12 +747,10 @@ class UyghurKeyboardService : InputMethodService() {
             return
         }
 
-        // If engine is not loaded, try again
-        Log.d(TAG, "ASR engine status: loaded=${asrEngine != null}, loading=$asrLoading")
-        if (asrEngine == null) {
-            preloadAsrEngine()
-            Toast.makeText(this, "ASR يۈكلىنىۋاتىدۇ... كۈتۈڭ", Toast.LENGTH_SHORT).show()
-        }
+        if (transcribing) return
+
+        // Make sure the engine is (being) loaded; recording can start meanwhile.
+        if (asrEngine == null) preloadAsrEngine()
 
         if (!audioRecorder.isRecording()) {
             // ─── Start recording ────────────────────────────────────
@@ -753,57 +759,114 @@ class UyghurKeyboardService : InputMethodService() {
             Log.d(TAG, "🎤 Recording started: $started")
             if (started) {
                 updateMicButton(true)
+                dictationJob = asrScope.launch { dictationLoop() }
             } else {
                 Toast.makeText(this, "Mic ئاچىلالمىدى", Toast.LENGTH_SHORT).show()
             }
-        } else {
-            Log.d(TAG, "Already recording, ignoring startRecording call")
         }
     }
 
+    /** Tap ⏹: microphone off; the loop finishes the last segment, then the button returns to 🎤. */
+    private fun stopDictation() {
+        if (!audioRecorder.isRecording()) return
+        Log.d(TAG, "🎤 Stopping dictation...")
+        transcribing = true
+        audioRecorder.stop()
+        updateMicButton(false)
+    }
+
     /**
-     * Stops the active recording, runs ASR inference, and commits text.
+     * Runs on a background thread while dictating: feeds new audio to the segmenter, shows
+     * provisional text while you speak and commits each phrase when you pause.
+     * Recognition calls are sequential, so a slow phone simply updates less often.
      */
-    private fun stopRecordingAndTranscribe() {
-        if (audioRecorder.isRecording()) {
-            // ─── Stop recording and transcribe ─────────────────────
-            Log.d(TAG, "🎤 Stopping recording...")
-            updateMicButton(false)
+    private suspend fun dictationLoop() {
+        val segmenter = SpeechSegmenter(audioRecorder.recordRate)
+        var fed = 0
+        var gotText = false
+        var engine: AsrEngine? = null
+        try {
+            engine = asrEngine ?: preloadAsrEngine().await()
+            while (true) {
+                val stopped = !audioRecorder.isRecording()
+                if (audioRecorder.isFull()) withContext(Dispatchers.Main) { stopDictation() }
+                val n = audioRecorder.sampleCount
+                if (n > fed) { segmenter.feed(audioRecorder.readRaw(fed, n)); fed = n }
 
-            // Run everything on main thread — inference is fast (~300ms)
-            try {
-                val audio = audioRecorder.stopRecording()
-                Log.d(TAG, "Got ${audio.size} samples")
-                
-                if (audio.isNotEmpty()) {
-                    if (asrEngine == null) {
-                        Toast.makeText(this, "ASR يۈكلىنىۋاتىدۇ... كۈتۈپ تۇرۇڭ", Toast.LENGTH_SHORT).show()
-                        return
+                when (val d = segmenter.decide(final = stopped)) {
+                    is SpeechSegmenter.Decision.Partial -> {
+                        val text = engine?.transcribe(audioRecorder.read(d.startSample, d.endSample))?.arabic.orEmpty()
+                        withContext(Dispatchers.Main) { showPartial(text) }
                     }
-
-                    val text = asrEngine?.transcribe(audio) ?: ""
-                    Log.d(TAG, "ASR result: \"$text\"")
-                    if (text.isNotEmpty()) {
-                        currentInputConnection?.commitText(text, 1)
-                        Log.d(TAG, "commitText done")
-                    } else {
-                        Toast.makeText(this, "No text recognized", Toast.LENGTH_SHORT).show()
+                    is SpeechSegmenter.Decision.Final -> {
+                        val text = engine?.transcribe(audioRecorder.read(d.startSample, d.endSample))?.arabic.orEmpty()
+                        if (text.isNotEmpty()) gotText = true
+                        withContext(Dispatchers.Main) { commitSegment(text) }
                     }
-                } else {
-                    Toast.makeText(this, "No audio", Toast.LENGTH_SHORT).show()
+                    SpeechSegmenter.Decision.None -> if (stopped) break else delay(120)
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "ASR error", e)
-                Toast.makeText(this, "ASR error", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            Log.e(TAG, "Dictation error", e)
+            withContext(Dispatchers.Main) {
+                Toast.makeText(this@UyghurKeyboardService, "ASR خاتالىقى", Toast.LENGTH_SHORT).show()
+            }
+        } finally {
+            withContext(NonCancellable + Dispatchers.Main) {
+                if (audioRecorder.isRecording()) audioRecorder.stop()
+                if (composingShown) commitSegment("")
+                transcribing = false
+                updateMicButton(false)
+                if (!gotText && engine != null) {
+                    Toast.makeText(this@UyghurKeyboardService, "ئاۋاز تونۇلمىدى", Toast.LENGTH_SHORT).show()
+                }
             }
         }
+    }
+
+
+    /** Provisional (underlined) text for the phrase being spoken. */
+    private fun showPartial(text: String) {
+        val ic = currentInputConnection ?: return
+        if (text.isEmpty() && !composingShown) return
+        val prefix = segmentPrefix ?: run {
+            val before = ic.getTextBeforeCursor(1, 0)?.toString().orEmpty()
+            (if (before.isNotEmpty() && !before.last().isWhitespace()) " " else "").also { segmentPrefix = it }
+        }
+        ic.setComposingText(if (text.isEmpty()) "" else prefix + text, 1)
+        composingShown = text.isNotEmpty()
+    }
+
+    /** Final text for a phrase: replaces the provisional text and moves on. */
+    private fun commitSegment(text: String) {
+        val ic = currentInputConnection
+        if (ic != null) {
+            if (text.isNotEmpty()) {
+                val prefix = segmentPrefix ?: run {
+                    val before = ic.getTextBeforeCursor(1, 0)?.toString().orEmpty()
+                    if (before.isNotEmpty() && !before.last().isWhitespace()) " " else ""
+                }
+                ic.commitText("$prefix$text ", 1)
+            } else if (composingShown) {
+                ic.setComposingText("", 1)
+                ic.finishComposingText()
+            }
+        }
+        segmentPrefix = null
+        composingShown = false
     }
 
     /**
      * Updates the mic button's visual state to reflect recording status.
      */
     private fun updateMicButton(recording: Boolean) {
-        micButton?.text = if (recording) "⏹" else "🎤"
+        micButton?.text = when {
+            transcribing -> "⏳"
+            recording -> "⏹"
+            else -> "🎤"
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════

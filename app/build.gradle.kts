@@ -31,8 +31,8 @@ android {
         // behavior policies (permissions, background restrictions) based on this value.
         targetSdk = 34
 
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
     }
 
     signingConfigs {
@@ -54,6 +54,12 @@ android {
             )
             signingConfig = signingConfigs.getByName("release")
         }
+    }
+
+    // Store the model and LM uncompressed in the APK: faster copy on first start and
+    // lets AsrEngine read the exact asset size (openFd) to detect a stale/broken copy.
+    androidResources {
+        noCompress += listOf("onnx", "txt")
     }
 
     // AGP 8.x requires Java 17 for compilation.
@@ -88,4 +94,8 @@ dependencies {
     // Kotlin coroutines for running ASR inference on a background thread
     // without blocking the keyboard UI.
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+
+    // ─── Tests ───────────────────────────────────────────────────────────
+    // JVM unit tests for the speech-recognition logic (app/src/test). Run: ./gradlew testDebugUnitTest
+    testImplementation("junit:junit:4.13.2")
 }

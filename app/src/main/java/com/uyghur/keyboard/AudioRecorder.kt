@@ -5,40 +5,38 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.util.Log
+import com.uyghur.keyboard.asr.Resampler
 
 /**
- * AudioRecorder — Captures raw PCM audio from the microphone.
+ * AudioRecorder — Captures mono 16-bit PCM from the microphone into a buffer that can be read
+ * while recording is still running (for live dictation).
  *
- * Records at 16 kHz, mono, 16-bit PCM — the format expected by the ASR model.
- * Audio is accumulated into an internal buffer while recording.
- * Call [startRecording] to begin and [stopRecording] to get the captured audio
- * as a normalized Float32 array in the range [-1.0, 1.0].
- *
- * Maximum recording duration is 10 seconds to prevent excessive memory usage.
+ * IMPORTANT: the ASR model was trained on 22050 Hz audio (gheyret/uyghur-asr-ctc, data.py),
+ * and its built-in mel front-end assumes 22050 Hz. Recording at 16 kHz and feeding that
+ * directly made the model hear speech at the wrong pitch/speed (≈2× more word errors).
+ * We record at 22050 Hz when the device supports it, otherwise at another rate and resample.
  */
 class AudioRecorder {
 
     companion object {
         private const val TAG = "AudioRecorder"
-        private const val SAMPLE_RATE = 16000
-        private const val MAX_DURATION_SECONDS = 10
-        private const val MAX_SAMPLES = SAMPLE_RATE * MAX_DURATION_SECONDS
+        const val MODEL_SAMPLE_RATE = 22050
+        private val CANDIDATE_RATES = intArrayOf(22050, 44100, 48000, 16000)
+        const val MAX_DURATION_SECONDS = 300
     }
 
     private var audioRecord: AudioRecord? = null
     private var recordingThread: Thread? = null
-    private var isRecording = false
+    @Volatile private var isRecording = false
 
-    // Buffer to accumulate PCM samples (Int16 → later converted to Float32)
-    private val pcmBuffer = ShortArray(MAX_SAMPLES)
-    private var sampleCount = 0
+    /** Sample rate actually used by the microphone (may differ from MODEL_SAMPLE_RATE). */
+    @Volatile var recordRate = MODEL_SAMPLE_RATE
+        private set
+    @Volatile private var pcmBuffer = ShortArray(0)
+    /** Number of samples recorded so far (at [recordRate]). Safe to read from any thread. */
+    @Volatile var sampleCount = 0
+        private set
 
-    /**
-     * Starts capturing audio from the microphone.
-     * Recording happens on a background thread to avoid blocking the UI.
-     *
-     * @return true if recording started successfully, false if permission denied or error.
-     */
     @SuppressLint("MissingPermission")
     fun startRecording(): Boolean {
         if (isRecording) {
@@ -46,83 +44,74 @@ class AudioRecorder {
             return false
         }
 
-        val bufferSize = AudioRecord.getMinBufferSize(
-            SAMPLE_RATE,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT
-        )
-
-        if (bufferSize == AudioRecord.ERROR || bufferSize == AudioRecord.ERROR_BAD_VALUE) {
-            Log.e(TAG, "Invalid buffer size: $bufferSize")
-            return false
-        }
-
-        try {
-            audioRecord = AudioRecord(
-                MediaRecorder.AudioSource.MIC,
-                SAMPLE_RATE,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                bufferSize * 2
-            )
-
-            if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
-                Log.e(TAG, "AudioRecord failed to initialize")
-                audioRecord?.release()
-                audioRecord = null
+        var record: AudioRecord? = null
+        for (rate in CANDIDATE_RATES) {
+            val minBuf = AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+            if (minBuf <= 0) continue
+            try {
+                val r = AudioRecord(
+                    MediaRecorder.AudioSource.VOICE_RECOGNITION, // tuned for ASR (no heavy AGC/effects)
+                    rate,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                    minBuf * 4
+                )
+                if (r.state == AudioRecord.STATE_INITIALIZED) {
+                    record = r
+                    recordRate = rate
+                    break
+                }
+                r.release()
+            } catch (e: SecurityException) {
+                Log.e(TAG, "RECORD_AUDIO permission not granted", e)
                 return false
+            } catch (e: IllegalArgumentException) {
+                Log.w(TAG, "Sample rate $rate not supported", e)
             }
-        } catch (e: SecurityException) {
-            Log.e(TAG, "RECORD_AUDIO permission not granted", e)
+        }
+        if (record == null) {
+            Log.e(TAG, "AudioRecord failed to initialize at any sample rate")
             return false
         }
 
+        audioRecord = record
+        pcmBuffer = ShortArray(recordRate * MAX_DURATION_SECONDS)
         sampleCount = 0
         isRecording = true
-        audioRecord?.startRecording()
+        record.startRecording()
 
-        // Read audio on a background thread
         recordingThread = Thread({
-            Log.d(TAG, "Recording thread started")
-            val chunkSize = 1600  // 100ms chunks at 16kHz
-            val tempBuffer = ShortArray(chunkSize)
-
-            while (isRecording && sampleCount < MAX_SAMPLES) {
-                val remaining = MAX_SAMPLES - sampleCount
-                val readSize = minOf(chunkSize, remaining)
-                val read = audioRecord?.read(tempBuffer, 0, readSize) ?: 0
-
+            val chunk = ShortArray(recordRate / 20) // 50 ms
+            val buf = pcmBuffer
+            while (isRecording && sampleCount < buf.size) {
+                val toRead = minOf(chunk.size, buf.size - sampleCount)
+                val read = audioRecord?.read(chunk, 0, toRead) ?: 0
                 if (read > 0) {
-                    System.arraycopy(tempBuffer, 0, pcmBuffer, sampleCount, read)
-                    sampleCount += read
+                    System.arraycopy(chunk, 0, buf, sampleCount, read)
+                    sampleCount += read   // publish after the copy (volatile write)
                 }
             }
-
             Log.d(TAG, "Recording thread finished. Samples: $sampleCount")
         }, "AudioRecorder-Thread")
         recordingThread?.start()
 
-        Log.d(TAG, "Recording started at ${SAMPLE_RATE}Hz")
+        Log.d(TAG, "Recording started at ${recordRate}Hz")
         return true
     }
 
-    /**
-     * Stops recording and returns the captured audio as a Float32 array.
-     *
-     * @return FloatArray of PCM samples normalized to [-1.0, 1.0],
-     *         or empty array if nothing was recorded.
-     */
-    fun stopRecording(): FloatArray {
-        isRecording = false
+    /** True while the microphone is on, or the buffer is full (max duration reached). */
+    fun isRecording(): Boolean = isRecording
 
-        // Wait for recording thread to finish
+    fun isFull(): Boolean = isRecording && sampleCount >= pcmBuffer.size
+
+    /** Stops the microphone. The recorded samples stay readable via [read]. */
+    fun stop() {
+        isRecording = false
         try {
             recordingThread?.join(1000)
         } catch (e: InterruptedException) {
             Log.w(TAG, "Interrupted while waiting for recording thread")
         }
-
-        // Stop and release AudioRecord
         try {
             audioRecord?.stop()
         } catch (e: IllegalStateException) {
@@ -131,38 +120,18 @@ class AudioRecorder {
         audioRecord?.release()
         audioRecord = null
         recordingThread = null
-
-        if (sampleCount == 0) {
-            Log.w(TAG, "No samples recorded")
-            return FloatArray(0)
-        }
-
-        Log.d(TAG, "Recorded $sampleCount samples (${sampleCount / SAMPLE_RATE.toFloat()}s)")
-
-        // Convert Int16 PCM → Float32 normalized to [-1.0, 1.0]
-        val floatAudio = FloatArray(sampleCount)
-        for (i in 0 until sampleCount) {
-            floatAudio[i] = pcmBuffer[i] / 32768.0f
-        }
-
-        // --- DEBUG: Save it to file for analysis ---
-        try {
-            val debugFile = java.io.File("/data/data/com.uyghur.keyboard/files/debug_audio.pcm")
-            val outputStream = java.io.DataOutputStream(java.io.FileOutputStream(debugFile))
-            for (f in floatAudio) {
-                outputStream.writeFloat(f)
-            }
-            outputStream.close()
-            Log.d(TAG, "Saved debug audio to ${debugFile.absolutePath}")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to save debug audio", e)
-        }
-
-        return floatAudio
+        Log.d(TAG, "Recording stopped: ${sampleCount / recordRate.toFloat()} s")
     }
 
-    /**
-     * Returns true if currently recording.
-     */
-    fun isRecording(): Boolean = isRecording
+    /** Raw samples [from, to) at [recordRate], as floats in [-1, 1]. */
+    fun readRaw(from: Int, to: Int): FloatArray {
+        val buf = pcmBuffer
+        val end = minOf(to, sampleCount)
+        if (from >= end) return FloatArray(0)
+        return FloatArray(end - from) { buf[from + it] / 32768.0f }
+    }
+
+    /** Samples [from, to) (indices at [recordRate]) resampled to [MODEL_SAMPLE_RATE] for the model. */
+    fun read(from: Int, to: Int): FloatArray =
+        Resampler.resample(readRaw(from, to), recordRate, MODEL_SAMPLE_RATE)
 }

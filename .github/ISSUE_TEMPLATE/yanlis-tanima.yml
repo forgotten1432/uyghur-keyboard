@@ -1,0 +1,37 @@
+name: 🎤 Yanlış tanıma
+description: Sesle yazma bir cümleyi yanlış yazdı
+title: "[Tanıma] "
+labels: ["ses-tanıma"]
+body:
+  - type: textarea
+    id: said
+    attributes:
+      label: Ne dedin?
+      description: Söylediğin cümle (Arap ya da Latin harfiyle)
+    validations:
+      required: true
+  - type: textarea
+    id: got
+    attributes:
+      label: Ne yazıldı?
+      description: Klavyenin yazdığı metni buraya kopyala
+    validations:
+      required: true
+  - type: dropdown
+    id: env
+    attributes:
+      label: Ortam
+      options:
+        - Sessiz oda
+        - Hafif gürültü (ev, ofis)
+        - Gürültülü (dışarıda, araçta)
+  - type: input
+    id: version
+    attributes:
+      label: Sürüm / derleme
+      description: Örn. v1.1.0-build-5
+  - type: textarea
+    id: audio
+    attributes:
+      label: Ses kaydı (isteğe bağlı)
+      description: Aynı cümleyi telefonla kaydedip buraya sürükle. Modeli iyileştirmek için çok faydalı.

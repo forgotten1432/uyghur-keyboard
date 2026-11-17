@@ -1,0 +1,11 @@
+name: ✨ Öneri
+description: Yeni bir özellik ya da iyileştirme fikri
+title: "[Öneri] "
+labels: ["öneri"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Fikrin ne?
+    validations:
+      required: true

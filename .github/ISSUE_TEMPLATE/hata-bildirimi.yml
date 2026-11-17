@@ -1,0 +1,27 @@
+name: 🐞 Hata bildirimi
+description: Klavye çöküyor, donuyor ya da bir şey çalışmıyor
+title: "[Hata] "
+labels: ["hata"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Ne oldu?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Nasıl tekrarlanır?
+      placeholder: |
+        1. ...
+        2. ...
+  - type: input
+    id: device
+    attributes:
+      label: Telefon ve Android sürümü
+      placeholder: Örn. Samsung A54, Android 14
+  - type: input
+    id: version
+    attributes:
+      label: Uygulama sürümü / derleme
