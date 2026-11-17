@@ -13,7 +13,7 @@ keys() { sleep 0.6; adb logcat -d -s UgKeys:D > "$OUT/keys.txt"; }
 tap() { adb shell input tap $1 $2; }
 key() { tap $(python3 $K one "$OUT/keys.txt" "$1"); }
 type_text() {
-  python3 $K pos "$OUT/keys.txt" "$1" | while read -r x y; do adb shell input tap "$x" "$y"; done
+  python3 $K pos "$OUT/keys.txt" "$1" | while read -r x y; do adb shell input tap "$x" "$y" </dev/null; done   # adb would eat the loop input
 }
 field_text() { dump; python3 $K text "$OUT/ui.xml" "$1"; }
 
