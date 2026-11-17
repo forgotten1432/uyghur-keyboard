@@ -123,7 +123,29 @@ class KeyboardView(context: Context) : View(context) {
     private fun geo(): KeyboardGeometry {
         val g = geometry
         if (g != null && g.width == width.toFloat()) return g
-        return KeyboardGeometry(layout, width.toFloat(), stripH, rowH).also { geometry = it }
+        return KeyboardGeometry(layout, width.toFloat(), stripH, rowH).also { geometry = it; logKeyPositions(it) }
+    }
+
+    /**
+     * Debug builds only: writes the on-screen centre of every key and strip slot to logcat
+     * ("UgKeys"), so the emulator test in CI can tap real keys.
+     */
+    private fun logKeyPositions(g: KeyboardGeometry) {
+        val debuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        if (!debuggable || width == 0) return
+        post {
+            val loc = IntArray(2); getLocationOnScreen(loc)
+            val sb = StringBuilder("layout=").append(layout.name)
+            for (b in g.boxes) {
+                val id = when (b.key.type) { KeyType.CHAR -> b.key.output; else -> b.key.type.name }
+                sb.append('|').append(id).append('=').append((loc[0] + b.centerX).toInt()).append(',').append((loc[1] + b.centerY).toInt())
+            }
+            val slotW = (width - micW - 4 * dp) / 3
+            for (i in 0..2) sb.append("|SLOT").append(i).append('=')
+                .append((loc[0] + micW + 4 * dp + slotW * (i + 0.5f)).toInt()).append(',').append((loc[1] + stripH / 2).toInt())
+            sb.append("|MIC=").append((loc[0] + micW / 2).toInt()).append(',').append((loc[1] + stripH / 2).toInt())
+            android.util.Log.d("UgKeys", sb.toString())
+        }
     }
 
     // ═══════════════════════════════ drawing ═══════════════════════════════

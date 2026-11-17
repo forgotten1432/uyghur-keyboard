@@ -85,6 +85,13 @@ class SetupActivity : AppCompatActivity() {
             setTextColor(fg); setHintTextColor(sub)
             minLines = 3
             gravity = Gravity.TOP or Gravity.START
+            contentDescription = "test-text"
+        })
+        col.addView(EditText(this).apply {
+            hint = "123 · سان · Sayı"
+            setTextColor(fg); setHintTextColor(sub)
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
+            contentDescription = "test-number"
         })
         setContentView(ScrollView(this).apply { setBackgroundColor(bg); addView(col) })
     }
