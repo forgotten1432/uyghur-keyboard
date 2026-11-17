@@ -1,5 +1,12 @@
 # Değişiklik kaydı
 
+## 1.1.1 — 2026-11-17
+
+### Sesle yazma
+- **Cümle daha geç kesinleşiyor:** 0,5 yerine ~1 saniyelik duraklamada. Kelime arasındaki kısa düşünme duraklamaları artık cümleyi bölmüyor. Duraklamalı konuşma testinde kelime hata oranı %19,5'ten %17,1'e indi.
+- **Kelime sonları kırpılmıyor:** konuşmanın sonundan 0,4 saniye fazladan alınıyor (eskiden 0,2).
+- **Ara metin bir kelime geriden geliyor:** henüz söylenmekte olan son kelime gösterilmiyor. Gösterilen kelimelerin sonradan değişme oranı %12'den %6'ya indi.
+
 ## 1.1.0 — 2026-11-17
 
 ### Sesle yazma
