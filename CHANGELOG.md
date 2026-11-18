@@ -1,5 +1,10 @@
 # Değişiklik kaydı
 
+## 1.3.2 — 2026-11-18
+
+- **Türkçe ve İngilizce cümle tahmini:** boşluktan sonra sonraki kelime artık bu dillerde de öneriliyor (örn. "bugün hava" → güzel / çok / soğuk, "thank" → you). Kelime çiftleri Tatoeba cümlelerinden (CC BY 2.0 FR) çıkarıldı: Türkçe 80 bin, İngilizce 117 bin çift. Üretmek için `tools/build_latin_bigrams.py`.
+- **Öneriler açılışta hemen geliyor:** sözlükler artık sırayla değil aynı anda yükleniyor, açık olan dil önce. Eskiden Türkçe/İngilizce öneriler, Uygurca sözlüğün yüklenmesini beklediği için ilk 30 saniye kadar hiç çıkmıyordu.
+
 ## 1.3.1 — 2026-11-17
 
 - **Ses tanımada sözlük bonusu:** tanıma, 154 bin Uygurca kelimelik sözlükte olan kelimeleri biraz daha fazla tercih ediyor. THUYG-20 test kümesinde kelime hatası %12,0'dan %11,6'ya indi.

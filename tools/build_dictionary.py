@@ -5,6 +5,7 @@ Outputs (app/src/main/assets/):
   uyghur_bigrams.txt  word1 word2<TAB>count   (next-word prediction)
   english_dict.txt    word<TAB>frequency, sorted by word
   turkish_dict.txt    word<TAB>frequency, sorted by word
+  (Turkish and English next-word pairs: see build_latin_bigrams.py)
 
 Sources:
   - Uyghur-LRs/Uyghur-Wordlist (CC BY 4.0, https://github.com/Uyghur-LRs/Uyghur-Wordlist):

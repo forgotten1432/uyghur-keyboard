@@ -50,7 +50,8 @@ class Lexicon(private val words: Array<String>, private val freqs: IntArray) {
                     f += line.substring(tab + 1).toIntOrNull() ?: 1
                 }
             }
-            // make sure the order matches Kotlin's String comparison
+            // the files are written sorted; only re-sort if the order differs from Kotlin's String comparison
+            if ((1 until w.size).all { w[it - 1] <= w[it] }) return Lexicon(w.toTypedArray(), f.toIntArray())
             val idx = w.indices.sortedWith { a, b -> w[a].compareTo(w[b]) }
             return Lexicon(Array(w.size) { w[idx[it]] }, IntArray(w.size) { f[idx[it]] })
         }
