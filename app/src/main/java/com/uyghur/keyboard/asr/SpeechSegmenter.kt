@@ -6,17 +6,33 @@ package com.uyghur.keyboard.asr
  * The model is bidirectional (BiGRU), so it cannot emit text frame by frame. Instead:
  *  - while you speak, the current segment is re-recognised every ~0.7 s → shown as underlined
  *    (composing) text, slightly behind your voice;
- *  - when you pause (~0.5 s), the segment is recognised once more and committed;
+ *  - when you pause (~1 s), the segment is recognised once more and committed. Shorter pauses
+ *    (thinking between words) don't split the sentence: splitting at 0.5 s cut sentences into
+ *    ~3 pieces and raised the word error rate from 17% to 19.5% in tests with hesitation pauses;
  *  - segments are capped (~15 s) and cut at the quietest point, so recognition cost stays bounded.
  *
  * Pure Kotlin (no Android) so it can be unit-tested on the JVM.
  */
 class SpeechSegmenter(
     private val sampleRate: Int,
-    private val endSilenceMs: Int = 500,
+    private val endSilenceMs: Int = 1000,
     private val partialEveryMs: Int = 700,
     private val maxSegmentMs: Int = 15_000,
+    private val endPadMs: Int = 400,
+    private val prerollMs: Int = 300,
 ) {
+    companion object {
+        /**
+         * Text to show while still speaking: everything except the last word, which is usually
+         * still being spoken. Halves how often shown words change afterwards (12% → 6% in tests).
+         */
+        fun stablePartial(text: String): String {
+            val t = text.trim()
+            val i = t.lastIndexOf(' ')
+            return if (i < 0) "" else t.substring(0, i)
+        }
+    }
+
     sealed class Decision {
         object None : Decision()
         /** Re-recognise [startSample, endSample) and show it as provisional text. */
@@ -38,7 +54,8 @@ class SpeechSegmenter(
     private val partialEveryFrames = partialEveryMs / 20
     private val maxSegFrames = maxSegmentMs / 20
     private val minSpeechFrames = 8                          // 160 ms of speech before showing anything
-    private val prerollFrames = 15                           // keep 300 ms before speech onset
+    private val prerollFrames = prerollMs / 20              // audio kept before speech onset
+    private val endPadFrames = endPadMs / 20                // audio kept after the last speech frame
 
     /** Feed newly recorded samples (float, any scale ±1). */
     fun feed(samples: FloatArray, from: Int = 0, to: Int = samples.size) {
@@ -73,7 +90,7 @@ class SpeechSegmenter(
 
         if (final) {
             if (speech < minSpeechFrames) return Decision.None
-            return finalize(minOf(nFrames, lastSpeech + 10))
+            return finalize(minOf(nFrames, lastSpeech + endPadFrames))
         }
 
         if (speech < minSpeechFrames) {
@@ -82,7 +99,7 @@ class SpeechSegmenter(
             return Decision.None
         }
         // pause after speech → commit
-        if (nFrames - 1 - lastSpeech >= endSilenceFrames) return finalize(lastSpeech + 10)
+        if (nFrames - 1 - lastSpeech >= endSilenceFrames) return finalize(lastSpeech + endPadFrames)
         // too long without a pause → cut at the quietest frame of the last 3 s
         if (segFrames >= maxSegFrames) {
             var cut = nFrames - 1

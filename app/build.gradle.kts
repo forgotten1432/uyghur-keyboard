@@ -7,6 +7,9 @@ plugins {
 
     // Apply the Kotlin Android plugin — enables writing Kotlin code in this module.
     id("org.jetbrains.kotlin.android")
+
+    // Screenshot tests: ./gradlew recordPaparazziDebug writes PNGs to app/src/test/snapshots/images
+    id("app.cash.paparazzi")
 }
 
 android {
@@ -31,8 +34,8 @@ android {
         // behavior policies (permissions, background restrictions) based on this value.
         targetSdk = 34
 
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 6
+        versionName = "1.3.1"
     }
 
     signingConfigs {

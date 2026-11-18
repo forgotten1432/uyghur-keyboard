@@ -28,7 +28,11 @@ Model çift yönlü (BiGRU), yani cümlenin sonunu görmeden kelime kelime çık
   - Gürültü tabanı sessiz çerçevelere göre uyarlanıyor.
   - Tabanın ~9 dB üstündeki çerçeveler "konuşma" sayılıyor.
 - **Ara sonuç:** Konuşma sürerken, mevcut parça her ~0,7 saniyede baştan tanınıyor ve altı çizili (*composing*) metin olarak gösteriliyor.
-- **Kesin sonuç:** Konuşmadan sonra ~0,5 saniye sessizlik olunca parça son kez tanınıp yazılıyor; yeni parça başlıyor.
+  - Son kelime gösterilmiyor, çünkü genelde hâlâ söyleniyor.
+  - Böylece gösterilen kelimelerin sonradan değişme oranı %12'den %6'ya iniyor.
+- **Kesin sonuç:** Konuşmadan sonra ~1 saniye sessizlik olunca parça son kez tanınıp yazılıyor; yeni parça başlıyor.
+  - Konuşmanın sonundan 0,4 saniye fazladan alınıyor ki kelime sonları kırpılmasın.
+  - 0,5 saniyelik eşik, kelime arasındaki düşünme duraklamalarında cümleyi ~3 parçaya bölüyordu ve hatayı artırıyordu. Kelime hata oranı %19,5'ten %17,1'e indi.
 - **Sınır:** Parça 15 saniyeyi geçerse son 3 saniyenin en sessiz noktasından kesiliyor. Böylece tanıma süresi sınırlı kalıyor.
 
 ## 3. Model — `AsrEngine.kt`
