@@ -5,6 +5,8 @@
 - **Türkçe ve İngilizce cümle tahmini:** boşluktan sonra sonraki kelime artık bu dillerde de öneriliyor (örn. "bugün hava" → güzel / çok / soğuk, "thank" → you). Kelime çiftleri Tatoeba cümlelerinden (CC BY 2.0 FR) çıkarıldı: Türkçe 80 bin, İngilizce 117 bin çift. Üretmek için `tools/build_latin_bigrams.py`.
 - **Öneriler açılışta hemen geliyor:** sözlükler artık sırayla değil aynı anda yükleniyor, açık olan dil önce. Eskiden Türkçe/İngilizce öneriler, Uygurca sözlüğün yüklenmesini beklediği için ilk 30 saniye kadar hiç çıkmıyordu.
 
+- **Sesle yazmada daha az hata:** dil modeli THUYG-20'nin yanında Common Voice 27.0'ın 220 bin Uygurca cümlesiyle yeniden kuruldu. Common Voice test kayıtlarında kelime hatası %14,5'ten %10,9'a indi (test cümleleri dil modeline alınmadı). Ses modeli değişmedi: Common Voice ile ince ayar denendi, test setlerinde kazanç vermedi (ayrıntılar TRAINING.md'de).
+
 ## 1.3.1 — 2026-11-17
 
 - **Ses tanımada sözlük bonusu:** tanıma, 154 bin Uygurca kelimelik sözlükte olan kelimeleri biraz daha fazla tercih ediyor. THUYG-20 test kümesinde kelime hatası %12,0'dan %11,6'ya indi.

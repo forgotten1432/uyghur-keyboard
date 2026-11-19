@@ -51,6 +51,16 @@ Mac mini (M1) eğitim için çok yavaş kalır; orada sadece değerlendirme ve d
 - int8'e çevirirken mel ön-işleme katmanı float bırakılmalı. Yoksa model tamamen bozulur (WER ~%99). `quantize_int8.py` bunu zaten yapıyor.
 - Dil modeli ağırlıkları (`alpha=0.3`, `beta=1.0`) THUYG üzerinde ayarlandı. Büyük bir dil modeli kurarsan `evaluate.py --alpha … --beta …` ile tekrar dene ve `CtcDecoder.kt` içindeki değerleri güncelle.
 
+## Denenenler ve sonuçlar (2026-11-18)
+
+Common Voice 27.0 Uygurca ile Colab T4'te denendi. Ölçüm: 200 Common Voice + 200 THUYG test kaydı, kelime hatası (WER).
+
+- **İnce ayar kazanç vermedi.** `lr=5e-5` modeli bozdu (CV dev %12 → %16). `lr=1e-5` ile bir tur sonunda test setleri yerinde saydı (CV %14,7 → %15,3, THUYG %17,7 → %17,5; dil modelsiz). Mevcut model Common Voice'un dev kısmında test kısmından çok daha iyi; büyük olasılıkla Common Voice'un bir kısmını zaten görmüş. Daha çok kazanç için asıl yol kendi sesinle kayıt (yukarıdaki 1. madde).
+- **Dil modeli en büyük kazancı verdi.** Common Voice'un bütün cümleleriyle kurulan dil modeli (test cümleleri hariç, budama 8) uygulamanın kod çözücüsüyle CV testinde WER'i %14,5'ten %10,9'a indirdi. Eski modelin THUYG test sonucu (%8,8) güvenilir değil; o dil modeli THUYG cümlelerini içeriyor. Bedeli: klavyenin Java belleği emülatörde 62 MB'tan 84 MB'a çıkıyor (135 bin bağlam; budamasız sürüm 213 bin bağlam olurdu, CV WER %10,7).
+- **int8 ARM'da sorunsuz, x86'da değil.** Telefonla aynı ARM işlemcide (Mac M1) int8 model fp32'ye çok yakın (CV %15,4'e karşı %14,9). Colab'ın x86 işlemcisinde aynı int8 model %21,7 veriyor; bu, x86'ya özgü bir int8 hesaplama farkı. **int8 modeli Colab'da ölçme**, fp32 ile ya da ARM bir makinede ölç.
+- BatchNorm istatistikleri sorun değil: ağırlıklar sabitken eğitim verisi geçirmek WER'i değiştirmedi.
+- Dinamik int8 (yalnız ağırlıklar) çok yavaş; telefona uygun değil.
+
 ## Hazır alternatifler (eğitmek istemezsen)
 
 - **Whisper-small Uygurca** (ixxan, Hugging Face): daha güçlü olabilir ama telefonda daha ağır çalışır (whisper.cpp gerekir).
