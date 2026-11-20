@@ -1,5 +1,10 @@
 # Değişiklik kaydı
 
+## 1.3.3 — 2026-11-20
+
+- **Ses modeli kendi kayıtlarla ince ayarlandı:** 234 kendi kaydı ve 3000 THUYG-20 cümlesiyle Mac'te (Apple GPU) 2 tur eğitildi. Eğitimde kullanılmayan 23 kendi kaydında kelime hatası %11,4'ten %9,0'a, harf hatası %3,9'dan %2,2'ye indi. Başka konuşmacılarda (THUYG test, 150 kayıt) neredeyse aynı: kelime hatası %12,6 → %13,3, harf hatası %3,90 → %3,82.
+- Yerel eğitim araçları: `tools/train/train_local.py` (Mac/CPU ince ayar) ve `tools/train/split_recording.py` (tek uzun kaydı cümlelere böler).
+
 ## 1.3.2 — 2026-11-18
 
 - **Türkçe ve İngilizce cümle tahmini:** boşluktan sonra sonraki kelime artık bu dillerde de öneriliyor (örn. "bugün hava" → güzel / çok / soğuk, "thank" → you). Kelime çiftleri Tatoeba cümlelerinden (CC BY 2.0 FR) çıkarıldı: Türkçe 80 bin, İngilizce 117 bin çift. Üretmek için `tools/build_latin_bigrams.py`.

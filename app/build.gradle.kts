@@ -34,8 +34,8 @@ android {
         // behavior policies (permissions, background restrictions) based on this value.
         targetSdk = 34
 
-        versionCode = 7
-        versionName = "1.3.2"
+        versionCode = 8
+        versionName = "1.3.3"
     }
 
     signingConfigs {

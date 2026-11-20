@@ -19,3 +19,7 @@ app/build/
 build/
 __pycache__/
 *.pyc
+
+# local fine-tuning (tools/train/train_local.py): checkpoints and personal voice recordings
+model/local_run/
+voice/

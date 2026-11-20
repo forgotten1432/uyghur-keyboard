@@ -61,6 +61,17 @@ Common Voice 27.0 Uygurca ile Colab T4'te denendi. Ölçüm: 200 Common Voice + 
 - BatchNorm istatistikleri sorun değil: ağırlıklar sabitken eğitim verisi geçirmek WER'i değiştirmedi.
 - Dinamik int8 (yalnız ağırlıklar) çok yavaş; telefona uygun değil.
 
+## Yerel ince ayar, kendi sesinle (2026-11-20)
+
+Mac M1'de (16 GB, Apple GPU) `tools/train/train_local.py` ile: 234 kendi kaydı (5 kat ağırlıkla) + 3000 THUYG-20 cümlesi, 2 tur, `lr=3e-5`, yaklaşık 1,5 saat. Kayıtlar tek uzun dosya olarak alınıp `tools/train/split_recording.py` ile cümlelere bölündü (ASR + hizalama, harf hatası %15'ten büyük parçalar atılır).
+
+| | Eski | Yeni |
+|---|---|---|
+| Kendi kayıtları (23, eğitimde yok), WER / CER | %11,4 / %3,9 | %9,0 / %2,2 |
+| THUYG test (150), WER / CER | %12,6 / %3,90 | %13,3 / %3,82 |
+
+Uygulamanın kod çözücüsüyle (dil modeli + ışın araması), int8, ARM. Daha çok kayıt (özellikle farklı ortamlarda) kazancı artırır.
+
 ## Hazır alternatifler (eğitmek istemezsen)
 
 - **Whisper-small Uygurca** (ixxan, Hugging Face): daha güçlü olabilir ama telefonda daha ağır çalışır (whisper.cpp gerekir).
