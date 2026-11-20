@@ -1,0 +1,25 @@
+current keyboard: com.uyghur.keyboard/.UyghurKeyboardService
+screenshot 01_setup
+screenshot 02_uyghur_empty
+screenshot 03_typed_three_times
+typed: ئەسسالامۇ ئەلەيكۇم قانداق ئەھۋالىڭىز. ئەسسالامۇ ئەلەيكۇم قانداق ئەھۋالىڭىز. ئەسسالامۇ ئەلەيكۇم قانداق ئەھۋالىڭىز. 
+screenshot 04_empty_field_prediction
+screenshot 05_after_first_word
+screenshot 06_after_second_word
+screenshot 07_after_third_word
+after tapping middle suggestion 3x: ئەسسالامۇ ئەلەيكۇم قانداق ئەھۋالىڭىز. 
+screenshot 08_completion_yax
+screenshot 09_typo_yaxshm
+after picking correction: ئەسسالامۇ ئەلەيكۇم قانداق  يازما ئەھۋالىڭىز. 
+screenshot 10_long_press_period
+screenshot 11_uyghur_shift
+screenshot 12_turkish
+screenshot 13_turkish_nasi
+turkish: 
+screenshot 14_english
+screenshot 15_english_typo
+screenshot 16_number_pad
+number field: 1250.75
+screenshot 17_number_typed
+screenshot 18_dark
+done
