@@ -1,5 +1,17 @@
 # Değişiklik kaydı
 
+## 1.3.3 — 2026-11-20
+
+- **Ses modeli kendi kayıtlarla ince ayarlandı:** 234 kendi kaydı ve 3000 THUYG-20 cümlesiyle Mac'te (Apple GPU) 2 tur eğitildi. Eğitimde kullanılmayan 23 kendi kaydında kelime hatası %11,4'ten %9,0'a, harf hatası %3,9'dan %2,2'ye indi. Başka konuşmacılarda (THUYG test, 150 kayıt) neredeyse aynı: kelime hatası %12,6 → %13,3, harf hatası %3,90 → %3,82.
+- Yerel eğitim araçları: `tools/train/train_local.py` (Mac/CPU ince ayar) ve `tools/train/split_recording.py` (tek uzun kaydı cümlelere böler).
+
+## 1.3.2 — 2026-11-18
+
+- **Türkçe ve İngilizce cümle tahmini:** boşluktan sonra sonraki kelime artık bu dillerde de öneriliyor (örn. "bugün hava" → güzel / çok / soğuk, "thank" → you). Kelime çiftleri Tatoeba cümlelerinden (CC BY 2.0 FR) çıkarıldı: Türkçe 80 bin, İngilizce 117 bin çift. Üretmek için `tools/build_latin_bigrams.py`.
+- **Öneriler açılışta hemen geliyor:** sözlükler artık sırayla değil aynı anda yükleniyor, açık olan dil önce. Eskiden Türkçe/İngilizce öneriler, Uygurca sözlüğün yüklenmesini beklediği için ilk 30 saniye kadar hiç çıkmıyordu.
+
+- **Sesle yazmada daha az hata:** dil modeli THUYG-20'nin yanında Common Voice 27.0'ın 220 bin Uygurca cümlesiyle yeniden kuruldu. Common Voice test kayıtlarında kelime hatası %14,5'ten %10,9'a indi (test cümleleri dil modeline alınmadı). Ses modeli değişmedi: Common Voice ile ince ayar denendi, test setlerinde kazanç vermedi (ayrıntılar TRAINING.md'de).
+
 ## 1.3.1 — 2026-11-17
 
 - **Ses tanımada sözlük bonusu:** tanıma, 154 bin Uygurca kelimelik sözlükte olan kelimeleri biraz daha fazla tercih ediyor. THUYG-20 test kümesinde kelime hatası %12,0'dan %11,6'ya indi.

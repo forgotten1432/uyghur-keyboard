@@ -321,22 +321,28 @@ class UyghurKeyboardService : InputMethodService(), KeyboardView.Listener {
 
     // ═══════════════════════════════ prediction ═══════════════════════════════
 
+    /**
+     * Each language loads on its own thread, the one the keyboard opens in first: loading takes
+     * several seconds per language (debug build), and a language must not wait for the others.
+     */
     private fun loadDictionaries() {
-        asrScope.launch(Dispatchers.IO) {
-            for (lang in Language.values()) {
+        val order = listOf(language) + Language.values().filter { it != language }
+        for (lang in order) {
+            asrScope.launch(Dispatchers.IO) {
+                val started = SystemClock.uptimeMillis()
                 val code = lang.code
                 val history = try {
                     File(filesDir, "user_history_$code.txt").takeIf { it.exists() }?.readText()?.let(UserHistory::parse)
                 } catch (e: Exception) { null } ?: UserHistory()
                 if (lang == Language.UYGHUR) migrateOldDictionary(history)
                 try {
-                    val dict = when (lang) {
-                        Language.UYGHUR -> "uyghur_dict.txt"
-                        Language.TURKISH -> "turkish_dict.txt"
-                        Language.ENGLISH -> "english_dict.txt"
+                    val name = when (lang) {
+                        Language.UYGHUR -> "uyghur"
+                        Language.TURKISH -> "turkish"
+                        Language.ENGLISH -> "english"
                     }
-                    val lexicon = assets.open(dict).use { Lexicon.load(it) }
-                    val bigrams = if (lang == Language.UYGHUR) assets.open("uyghur_bigrams.txt").use { Bigrams.load(it) } else Bigrams.EMPTY
+                    val lexicon = assets.open("${name}_dict.txt").use { Lexicon.load(it) }
+                    val bigrams = assets.open("${name}_bigrams.txt").use { Bigrams.load(it) }
                     val neighbours = Layouts.neighbours(Layouts.letters(lang, ShiftState.OFF, false))
                     val p = WordPredictor(
                         lexicon, bigrams, neighbours, history,
@@ -348,6 +354,7 @@ class UyghurKeyboardService : InputMethodService(), KeyboardView.Listener {
                         },
                         if (lang == Language.TURKISH) Locale("tr", "TR") else Locale.ROOT,
                     )
+                    Log.i(TAG, "Dictionary $lang loaded in ${SystemClock.uptimeMillis() - started} ms")
                     withContext(Dispatchers.Main) {
                         histories[lang] = history
                         predictors[lang] = p
